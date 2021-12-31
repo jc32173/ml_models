@@ -216,20 +216,39 @@ for hp_dict, df_hp in hyperparam_iter:
 
     additional_params['model_dir'] = 'trained_model'+str(mod_i)
 
-    p = Process(target=train_model, kwargs=(dict(mod_i=mod_i,
-                                                 **run_input['training'],
-                                                 hyperparams=hp_dict,
-                                                 additional_params=additional_params,
-                                                 train_set=train_set,
-                                                 val_set=val_set,
-                                                 test_set=test_set,
-                                                 ext_test_set=ext_test_set,
-                                                 transformers=transformers,
-                                                 out_file=info_out,
-                                                 run_results=run_results,
-                                                 rand_seed=rand_seed)))
-    p.start()
-    p.join()
+    # Run training in a separate process by default to match previous 
+    # behaviour and prevent memory leak:
+    if run_input['training'].get('separate_process') is None or \
+       run_input['training']['separate_process'] == True:
+
+        p = Process(target=train_model, kwargs=(dict(mod_i=mod_i,
+                                                     **run_input['training'],
+                                                     hyperparams=hp_dict,
+                                                     additional_params=additional_params,
+                                                     train_set=train_set,
+                                                     val_set=val_set,
+                                                     test_set=test_set,
+                                                     ext_test_set=ext_test_set,
+                                                     transformers=transformers,
+                                                     out_file=info_out,
+                                                     run_results=run_results,
+                                                     rand_seed=rand_seed)))
+        p.start()
+        p.join()
+
+    else:
+        train_model(mod_i=mod_i,
+                    **run_input['training'],
+                    hyperparams=hp_dict,
+                    additional_params=additional_params,
+                    train_set=train_set,
+                    val_set=val_set,
+                    test_set=test_set,
+                    ext_test_set=ext_test_set,
+                    transformers=transformers,
+                    out_file=info_out,
+                    run_results=run_results,
+                    rand_seed=rand_seed)
 
     # Increment model counter:
     mod_i += 1

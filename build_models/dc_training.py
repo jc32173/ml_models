@@ -185,6 +185,7 @@ def train_model(mod_i,
                 ext_test_set, 
                 # Not read here, but keep to avoid errors:
                 hyperparam_search='',
+                separate_process='',
                 early_stopping=False,
                 early_stopping_interval=50,
                 early_stopping_threshold=0.0001,

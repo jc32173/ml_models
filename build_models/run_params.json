@@ -37,6 +37,7 @@
     "training" : {
         "epochs" : 400,
         "model_fn_str" : "dc.models.GraphConvModel",
+        "separate_process" : true,
         "hyperparam_search" : 'grid',
         "early_stopping" : true,
         "early_stopping_interval" : 50,
