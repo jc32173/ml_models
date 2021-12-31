@@ -13,6 +13,7 @@ sys.path.insert(0, '/users/xpb20111/programs/deepchem')
 from modified_deepchem.CSVLoaderPreprocess import CSVLoaderPreprocess
 from modified_deepchem.CSVLoaderPreprocess_ExtraDesc import CSVLoaderPreprocess_ExtraDesc
 from modified_deepchem.ConvMolRISMFeaturizer import ConvMolRISMFeaturizer
+from modified_deepchem.PreprocessFeaturizerWrapper import PreprocessFeaturizerWrapper
 
 # Check for overlap between sets using:
 def check_data_split(train_set, val_set, test_split):
@@ -168,12 +169,12 @@ class GetDataset():
                  id_field='',
                  featurizer=None,
                  mode='regression',
-                 use_chirality=False,
+                 #use_chirality=False,
                  tauto=False,
                  ph=None,
                  phmodel='OpenEye',
                  rdkit_desc=False,
-                 extra_desc=None, 
+                 extra_desc=[], 
                  DAGModel=False):
 
         self.dataset_file = dataset_file
@@ -181,22 +182,37 @@ class GetDataset():
             tasks = [tasks]
         self.tasks = tasks
 
+        if isinstance(extra_desc, str):
+            extra_desc = [extra_desc]
+
         self.additional_params = {'n_tasks' : len(tasks), 
-                                  'mode' : 'regression'}
+                                  'mode' : mode}
 
         self.feature_field=feature_field
         self.id_field=id_field
-        self.tauto=tauto
-        self.ph=ph
-        self.phmodel=phmodel
-        self.rdkit_desc=rdkit_desc
-        self.extra_desc=extra_desc
-        self.DAGModel=DAGModel
+#        self.tauto=tauto
+#        self.ph=ph
+#        self.phmodel=phmodel
+#        self.rdkit_desc=rdkit_desc
+#        self.extra_desc=extra_desc
+#        self.DAGModel=DAGModel
 
-        if featurizer is None:
-            self.featurizer = dc.feat.ConvMolFeaturizer(use_chirality=use_chirality)
-        else:
+        if isinstance(featurizer, list) or tauto or ph or rdkit_desc or extra_desc:
+            print('Using PreprocessFeaturizerWrapper')
+            self.featurizer = PreprocessFeaturizerWrapper(
+                     smiles_column=feature_field,
+                     featurizer=[eval(f) for f in featurizer],
+                     tauto=tauto,
+                     ph=ph,
+                     phmodel=phmodel,
+                     rdkit_desc=rdkit_desc,
+                     extra_desc=extra_desc)
+            self.feature_field = [feature_field] + extra_desc
+
+        elif featurizer is not None:
             self.featurizer = eval(featurizer)
+        else:
+            self.featurizer = dc.feat.ConvMolFeaturizer(use_chirality=False)
 
     def __call__(self, 
                  dataset_file=None, 
@@ -215,13 +231,28 @@ class GetDataset():
         if id_field is None:
             id_field = self.id_field
 
-        loader, get_n_feat = self.get_data_loader(tasks, 
-                                                  feature_field, 
-                                                  id_field)
+        loader = self.get_data_loader(tasks, 
+                                      feature_field, 
+                                      id_field)
 
         dataset = loader.create_dataset(dataset_file)
 
-        n_feat = get_n_feat(dataset)
+        # Get number of atom features:
+        def get_n_feat(data_block):
+            if type(data_block) == dc.feat.mol_graphs.ConvMol:
+                n_feat = data_block.n_feat
+            elif type(data_block) == dc.feat.mol_graphs.WeaveMol:
+                n_feat = data_block.n_features
+            else:
+                n_feat = None
+            return n_feat
+
+        if len(dataset.X.shape) == 1:
+            n_feat = get_n_feat(dataset.X[0])
+        else:
+            n_feat = []
+            for data_block in dataset.X[0]:
+                n_feat.append(get_n_feat(data_block))
 
         self.additional_params['n_atom_feat'] = n_feat
 
@@ -250,46 +281,55 @@ class GetDataset():
 
         #if self.extra_desc == 'RF-Score':   
 
-        if self.rdkit_desc or (self.extra_desc is not None and len(self.extra_desc) > 0):
-            print('Using Preprocess_ExtraDesc')
-            loader = CSVLoaderPreprocess_ExtraDesc(tasks=tasks, 
-                                                   feature_field=feature_field, 
-                                                   id_field=id_field,
-                                                   rdkit_features=self.rdkit_desc, 
-                                                   mol_features=self.extra_desc, 
-                                                   tauto=self.tauto, 
-                                                   ph=self.ph, 
-                                                   phmodel=self.phmodel, 
-                                                   featurizer=self.featurizer)
-            if 'Weave' in str(self.featurizer):
-                get_n_feat = lambda ds: ds.X[0][0].n_features
-            else:
-                get_n_feat = lambda ds: ds.X[0][0].n_feat
-
-        elif self.ph or self.tauto:
-            print('Using CSVLoaderPreprocess')
-            loader = CSVLoaderPreprocess(tasks=tasks, 
-                                         feature_field=feature_field, 
-                                         id_field=id_field, 
-                                         tauto=self.tauto, 
-                                         ph=self.ph, 
-                                         phmodel=self.phmodel, 
-                                         featurizer=self.featurizer) 
-            if 'Weave' in str(self.featurizer):
-                get_n_feat = lambda ds: ds.X[0].n_features
-            else:
-                get_n_feat = lambda ds: ds.X[0].n_feat
-        else:
-            print('Using dc.data.CSVLoader')
-            loader = dc.data.CSVLoader(tasks=tasks, 
-                                       feature_field=feature_field, 
-                                       id_field=id_field, 
-                                       featurizer=self.featurizer) 
-            if 'Weave' in str(self.featurizer):
-                get_n_feat = lambda ds: ds.X[0].n_features
-            else:
-                get_n_feat = lambda ds: ds.X[0].n_feat
-        return loader, get_n_feat
+        # First version had a different CSVLoader depending on the preprocessing, 
+        # have now moved preprocessing to featurizer, so use unmodified CSVLoader, 
+        # but with own featurizer wrapper:
+#        if self.rdkit_desc or (self.extra_desc is not None and len(self.extra_desc) > 0):
+#            print('Using Preprocess_ExtraDesc')
+#            loader = CSVLoaderPreprocess_ExtraDesc(tasks=tasks, 
+#                                                   feature_field=feature_field, 
+#                                                   id_field=id_field,
+#                                                   rdkit_features=self.rdkit_desc, 
+#                                                   mol_features=self.extra_desc, 
+#                                                   tauto=self.tauto, 
+#                                                   ph=self.ph, 
+#                                                   phmodel=self.phmodel, 
+#                                                   featurizer=self.featurizer)
+#            if 'Weave' in str(self.featurizer):
+#                get_n_feat = lambda ds: ds.X[0][0].n_features
+#            else:
+#                get_n_feat = lambda ds: ds.X[0][0].n_feat
+#
+#        elif self.ph or self.tauto:
+#            print('Using CSVLoaderPreprocess')
+#            loader = CSVLoaderPreprocess(tasks=tasks, 
+#                                         feature_field=feature_field, 
+#                                         id_field=id_field, 
+#                                         tauto=self.tauto, 
+#                                         ph=self.ph, 
+#                                         phmodel=self.phmodel, 
+#                                         featurizer=self.featurizer) 
+#            if 'Weave' in str(self.featurizer):
+#                get_n_feat = lambda ds: ds.X[0].n_features
+#            else:
+#                get_n_feat = lambda ds: ds.X[0].n_feat
+#        else:
+#            print('Using dc.data.CSVLoader')
+#            loader = dc.data.CSVLoader(tasks=tasks, 
+#                                       feature_field=feature_field, 
+#                                       id_field=id_field, 
+#                                       featurizer=self.featurizer) 
+#            if 'Weave' in str(self.featurizer):
+#                get_n_feat = lambda ds: ds.X[0].n_features
+#            else:
+#                get_n_feat = lambda ds: ds.X[0].n_feat
+#        return loader, get_n_feat
+        print('Using dc.data.CSVLoader')
+        loader = dc.data.CSVLoader(tasks=tasks, 
+                                   feature_field=feature_field, 
+                                   id_field=id_field, 
+                                   featurizer=self.featurizer)
+        return loader
 
 
 def train_val_test_split(dataset, 
@@ -310,6 +350,28 @@ def train_val_test_split(dataset,
         # Random split using deepchem:
 
         splitter = dc.splits.RandomSplitter()
+        train_set, val_set, test_set = \
+            splitter.train_valid_test_split(dataset,
+                                            frac_train=frac_train,
+                                            frac_valid=frac_valid,
+                                            frac_test=frac_test,
+                                            seed=rand_seed)
+    elif split_method == 'fp':
+
+        # Split based on fingerprint similarity:
+
+        splitter = dc.splits.FingerprintSplitter()
+        train_set, val_set, test_set = \
+            splitter.train_valid_test_split(dataset,
+                                            frac_train=frac_train,
+                                            frac_valid=frac_valid,
+                                            frac_test=frac_test,
+                                            seed=rand_seed)
+    elif split_method == 'butina':
+
+        # Split based on butina clustering:
+
+        splitter = dc.splits.ButinaSplitter(cutoff=0.6)
         train_set, val_set, test_set = \
             splitter.train_valid_test_split(dataset,
                                             frac_train=frac_train,

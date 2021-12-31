@@ -72,11 +72,20 @@ run_results[('training_info', 'deepchem_version')] = dc.__version__
 
 ## Fill in any info constant for all runs:
 #run_results'model_number', 'dataset', 'split', 'model', 'np_seed', 'tf_seed', 'split_seed' 
-#run_results = pd.concat([run_input[['model_info']], run_input[['dataset']], run_results], verify_integrity=True)
+s_ls = []
+for level1 in ['model_info', 'dataset', 'preprocessing', 'splitting', 'feature_selection', 'training']:
+    if level1 not in run_input.keys():
+        continue
+    s = pd.Series(data=run_input[level1])
+    s.index = pd.MultiIndex.from_tuples([(level1, level2) for level2 in s.index])
+    s_ls.append(s)
+run_results = pd.concat([run_results] + s_ls, verify_integrity=True)
 
 # Add in extra columns here, eventually make this not hard coded:
 run_results[('training_info', 'n_atom_feat')] = np.nan
-run_results[('training_info', 'N_PCA_feats')] = np.nan
+if 'feature_selection' in run_input.keys() and \
+   run_input['feature_selection'].get('selection_method') == 'PCA':
+    run_results[('training_info', 'N_PCA_feats')] = np.nan
 
 # File to save model details for each set of hyperparameters:
 if not os.path.isfile('GCNN_info_all_models.csv'):
@@ -135,15 +144,18 @@ if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
 
 if 'DAG' in run_input['training']['model_fn_str']:
     max_atoms = max([mol.get_num_atoms() for mol in dataset.X])
-    for set_name in run_input['ext_datasets']['_order']:
-        max_atoms = max([mol.get_num_atoms() for mol in ext_test_set[set_name].X] + [max_atoms])
+    if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
+        for set_name in run_input['ext_datasets']['_order']:
+            max_atoms = max([mol.get_num_atoms() for mol in ext_test_set[set_name].X] + [max_atoms])
     additional_params['max_atoms'] = max_atoms
     transformer = dc.trans.DAGTransformer(max_atoms=max_atoms)
     train_set = transformer.transform(train_set)
     val_set = transformer.transform(val_set)
-    test_set = transformer.transform(test_set)
-    for set_name in run_input['ext_datasets']['_order']:
-        ext_test_set[set_name] = transformer.transform(ext_test_set[set_name])
+    if test_set:
+        test_set = transformer.transform(test_set)
+    if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
+        for set_name in run_input['ext_datasets']['_order']:
+            ext_test_set[set_name] = transformer.transform(ext_test_set[set_name])
     transformers.append(transformer)
 
 #print()
@@ -176,8 +188,9 @@ if 'feature_selection' in run_input:
     val_set = feat_transformer.transform(val_set)
     if test_set:
         test_set = feat_transformer.transform(test_set)
-    for set_name in run_input['ext_datasets']['_order']:
-        ext_test_set[set_name] = feat_transformer.transform(ext_test_set[set_name])
+    if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
+        for set_name in run_input['ext_datasets']['_order']:
+            ext_test_set[set_name] = feat_transformer.transform(ext_test_set[set_name])
     transformers.append(feat_transformer)
 
 # Hyperparameter tuning:

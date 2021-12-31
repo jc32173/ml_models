@@ -1,6 +1,8 @@
 from sklearn.model_selection import StratifiedShuffleSplit
 from rdkit import Chem
 import tensorflow as tf
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
 import deepchem as dc
 import pandas as pd
 import numpy as np
@@ -305,7 +307,8 @@ def train_model(mod_i,
     #for add_param, add_val in additional_params.items():
     #    run_results[('training_info', add_param)] = add_val
     run_results[('training_info', 'n_atom_feat')] = additional_params.get('n_atom_feat')
-    run_results[('training_info', 'N_PCA_feats')] = additional_params.get('N_PCA_feats')
+    if 'N_PCA_feats' in run_results['training_info'].index:
+        run_results[('training_info', 'N_PCA_feats')] = additional_params.get('N_PCA_feats')
 
     # Write output?
     run_results[('model_info', 'model_number')] = mod_i

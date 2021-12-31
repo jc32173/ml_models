@@ -10,14 +10,16 @@ from deepchem.feat import Featurizer
 class PreprocessFeaturizerWrapper(Featurizer):
 
     def __init__(self,
-                 smiles_column=None, 
-                 featurizers=[], 
+                 featurizer=[], 
                  tauto=None,
                  ph=False, 
                  phmodel=None,
                  rdkit_desc=False, 
-                 extra_desc=[]):
-        self.featurizers = featurizers
+                 extra_desc=[], 
+                 smiles_column=None):
+
+        #if 
+        self.featurizer = featurizer
         self.tauto = tauto
         self.ph = ph
         self.phmodel = phmodel
@@ -25,7 +27,7 @@ class PreprocessFeaturizerWrapper(Featurizer):
         self.extra_desc = extra_desc
 
         # To get around needing to change CSVLoader
-        self.smi_col = smiles_column
+        self.smiles_column = smiles_column
 
     def featurize(self, 
                   data, 
@@ -33,11 +35,11 @@ class PreprocessFeaturizerWrapper(Featurizer):
                   **kwargs, # kwargs, e.g. additional_data
                  ):
 
-        # Unpack input if dataframe or string:
+        # Unpack input if dataframe:
 
         if isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
             if len(data.shape) > 1 and data.shape[1] > 1:
-                smi = data[self.smi_col].squeeze()
+                smi = data[self.smiles_column].squeeze()
             # If data is 1D DataFrame, convert to Series:
             else:
                 smi = data.squeeze()
@@ -68,9 +70,9 @@ class PreprocessFeaturizerWrapper(Featurizer):
         #print('Number of SMILES changed in preprocessing: {}'.format(np.where()))
 
         # Use featurizers for atom level descriptors:
-        if isinstance(self.featurizers, list):
+        if isinstance(self.featurizer, list):
             graph_feats = []
-            for featurizer in self.featurizers:
+            for featurizer in self.featurizer:
                 # featurizer has **kwargs, pass any additional data as kwargs:
                 graph_feats.append(featurizer(processed_smi, **kwargs)) #additional_data)
         else:
@@ -80,7 +82,7 @@ class PreprocessFeaturizerWrapper(Featurizer):
         if self.extra_desc or self.rdkit_desc:
             mol_feats = []
             if self.extra_desc: # is not None and len(self.mol_features) > 0:
-                mol_feats = mol_feats + [elt for elt in data[self.extra_desc].to_numpy()]
+                mol_feats += [elt for elt in data[self.extra_desc].to_numpy()]
             if self.rdkit_desc:
                 desc_ls = [x[0] for x in Chem.Descriptors._descList]
                 mol_feats += [calc_rdkit_descs(smi, desc_ls)[0] for smi in processed_smi]
