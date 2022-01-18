@@ -221,6 +221,7 @@ for hp_dict, df_hp in hyperparam_iter:
     if run_input['training'].get('separate_process') is None or \
        run_input['training']['separate_process'] == True:
 
+        print("Running training in separate process to prevent memory leak", flush=True)
         p = Process(target=train_model, kwargs=(dict(mod_i=mod_i,
                                                      **run_input['training'],
                                                      hyperparams=hp_dict,
@@ -237,6 +238,7 @@ for hp_dict, df_hp in hyperparam_iter:
         p.join()
 
     else:
+        print("Running training without specifying a new process", flush=True)
         train_model(mod_i=mod_i,
                     **run_input['training'],
                     hyperparams=hp_dict,

@@ -149,7 +149,7 @@ class ValCallback():
             print('Epoch: {}, MSE (loss): Training: {}, Validation: {}'.format(
                 stp/self.n_batches_per_epoch, 
                 self.train_scores[-1]['mse'], 
-                self.val_scores[-1]['mse']))
+                self.val_scores[-1]['mse']), flush=True)
 
             # If best epoch, save predictions:
             if np.argmin([i['mse'] for i in self.val_scores]) == len(self.val_scores) - 1:
