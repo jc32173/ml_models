@@ -125,6 +125,9 @@ class ValCallback():
 
         self.best_mse = None
 
+        # Time to start training each epoch:
+        self.training_t0 = datetime.now()
+
     def __call__(self, mdl, stp):
 
         if stp % (self.n_batches_per_epoch*self.log_freq) == 0:
@@ -145,11 +148,6 @@ class ValCallback():
                         mdl.evaluate(self.ext_test_set[set_name], 
                                      metrics=metrics_ls, 
                                      transformers=self.transformers))
-
-            print('Epoch: {}, MSE (loss): Training: {}, Validation: {}'.format(
-                stp/self.n_batches_per_epoch, 
-                self.train_scores[-1]['mse'], 
-                self.val_scores[-1]['mse']), flush=True)
 
             # If best epoch, save predictions:
             if np.argmin([i['mse'] for i in self.val_scores]) == len(self.val_scores) - 1:
@@ -172,6 +170,16 @@ class ValCallback():
                     for set_name in self.ext_test_set.keys():
                         self.ext_test_preds[set_name][0] = mdl.predict(self.ext_test_set[set_name], 
                                                                        transformers=self.transformers)
+
+            self.training_t1 = datetime.now()
+
+            print('Epoch: {}, MSE (loss): Training: {}, Validation: {} (Time: {})'.format(
+                stp/self.n_batches_per_epoch, 
+                self.train_scores[-1]['mse'], 
+                self.val_scores[-1]['mse'],
+                str((self.training_t1 - self.training_t0)).split('.')[0]), flush=True)
+
+            self.training_t0 = self.training_t1
 
 
 def train_model(mod_i, 
