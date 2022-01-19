@@ -39,6 +39,8 @@
         "model_fn_str" : "dc.models.GraphConvModel",
         "separate_process" : true,
         "hyperparam_search" : 'grid',
+        "use_GPGO" : true,
+        "GPGO_iterations" : 20,
         "early_stopping" : true,
         "early_stopping_interval" : 50,
         "early_stopping_threshold" : 0.0001,
