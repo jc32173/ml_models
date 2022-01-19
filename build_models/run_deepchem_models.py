@@ -19,6 +19,7 @@ from datetime import datetime
 import json
 from itertools import product
 
+
 # Set random seeds to make results fully reproducable:
 if len(sys.argv) >= 3:
     rand_seed = int(sys.argv[2])
@@ -80,6 +81,11 @@ for level1 in ['model_info', 'dataset', 'preprocessing', 'splitting', 'feature_s
     s.index = pd.MultiIndex.from_tuples([(level1, level2) for level2 in s.index])
     s_ls.append(s)
 run_results = pd.concat([run_results] + s_ls, verify_integrity=True)
+
+# Use environment variables to get N CPUs/nodes and slurm job ID if run on slurm:
+# See: https://hpcc.umd.edu/hpcc/help/slurmenv.html
+run_results[('training_info', 'n_cpus_nodes')] = '['+str(os.environ.get('SLURM_CPUS_ON_NODE'))+']'
+run_results[('training_info', 'slurm_jobid')] = os.environ.get('SLURM_JOB_ID')
 
 # Add in extra columns here, eventually make this not hard coded:
 run_results[('training_info', 'n_atom_feat')] = np.nan
