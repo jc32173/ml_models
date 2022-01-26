@@ -149,6 +149,7 @@ if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
         ext_test_set[set_name] = transformers[-1].transform(ext_test_set[set_name])
 
 if 'DAG' in run_input['training']['model_fn_str']:
+    reshard_size = 100
     max_atoms = max([mol.get_num_atoms() for mol in dataset.X])
     if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
         for set_name in run_input['ext_datasets']['_order']:
@@ -156,12 +157,16 @@ if 'DAG' in run_input['training']['model_fn_str']:
     additional_params['max_atoms'] = max_atoms
     transformer = dc.trans.DAGTransformer(max_atoms=max_atoms)
     train_set = transformer.transform(train_set)
+    train_set.reshard(reshard_size)
     val_set = transformer.transform(val_set)
+    val_set.reshard(reshard_size)
     if test_set:
         test_set = transformer.transform(test_set)
+        test_set.reshard(reshard_size)
     if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
         for set_name in run_input['ext_datasets']['_order']:
             ext_test_set[set_name] = transformer.transform(ext_test_set[set_name])
+            ext_test_set[set_name].reshard(reshard_size)
     transformers.append(transformer)
 
 #print()
