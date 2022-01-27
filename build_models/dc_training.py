@@ -250,7 +250,7 @@ def train_model(mod_i,
             current_epoch += early_stopping_interval
 
             mse_diff = prev_mse - val_cb.best_mse
-            if mse_diff < early_stopping_threshold:
+            if mse_diff <= early_stopping_threshold:
                 print('Early stopping: Change in best Valdation MSE '+\
                       'after epochs: {} and {} was {:.3f} (< threshold ({}))'\
                       .format(current_epoch-early_stopping_interval,
