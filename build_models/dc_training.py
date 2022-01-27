@@ -150,7 +150,9 @@ class ValCallback():
                                      transformers=self.transformers))
 
             # If best epoch, save predictions:
+            epoch_note=""
             if np.argmin([i['mse'] for i in self.val_scores]) == len(self.val_scores) - 1:
+                epoch_note=" (Current best)"
                 self.best_mse = self.val_scores[-1]['mse']
 
                 if self.test_set:
@@ -173,11 +175,12 @@ class ValCallback():
 
             self.training_t1 = datetime.now()
 
-            print('Epoch: {}, MSE (loss): Training: {}, Validation: {} (Time: {})'.format(
+            print('Epoch: {}, MSE (loss): Training: {}, Validation: {} (Time: {}){}'.format(
                 stp/self.n_batches_per_epoch, 
                 self.train_scores[-1]['mse'], 
                 self.val_scores[-1]['mse'],
-                str((self.training_t1 - self.training_t0)).split('.')[0]), flush=True)
+                str((self.training_t1 - self.training_t0)).split('.')[0])
+                epoch_note, flush=True)
 
             self.training_t0 = self.training_t1
 
