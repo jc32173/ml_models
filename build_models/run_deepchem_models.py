@@ -41,6 +41,12 @@ json_infile = sys.argv[1]
 print('Reading input parameters from .json file: {}'.format(json_infile))
 run_input = json.load(open(json_infile, 'r'))
 
+# If GraphConv model limit TF threads to 1 (otherwise seems to cause problems on Archie), other models
+# seem to be alright and are able to run slightly faster when the number of threads is not set:
+if 'GraphConv' in run_input['training']['model_fn_str']:
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+
 # Use multiindex header:
 header = []
 

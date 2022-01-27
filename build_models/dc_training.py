@@ -1,8 +1,8 @@
 from sklearn.model_selection import StratifiedShuffleSplit
 from rdkit import Chem
 import tensorflow as tf
-tf.config.threading.set_intra_op_parallelism_threads(1)
-tf.config.threading.set_inter_op_parallelism_threads(1)
+#tf.config.threading.set_intra_op_parallelism_threads(1)
+#tf.config.threading.set_inter_op_parallelism_threads(1)
 import deepchem as dc
 import pandas as pd
 import numpy as np
