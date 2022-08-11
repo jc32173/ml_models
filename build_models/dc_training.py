@@ -42,8 +42,8 @@ def get_hyperparams_grid(hyperparams,
             hp_dict['optimizer'] = dc.models.optimizers.Adam(learning_rate=hp_dict['learning_rate'])
             del hp_dict['learning_rate']
     #    if dropout_type = 'all', 'last_dense', 'last_graph', 'all_dense', 'all_graph'
-        if 'dropout' in hp_dict and 'graph_conv_layers' in hp_dict:
-            hp_dict['dropout'] = [0]*len(hp_dict['graph_conv_layers']) + [hp_dict['dropout']]
+        #if 'dropout' in hp_dict and 'graph_conv_layers' in hp_dict:
+        #    hp_dict['dropout'] = [0]*len(hp_dict['graph_conv_layers']) + [hp_dict['dropout']]
 
         yield hp_dict, df_hp
 
