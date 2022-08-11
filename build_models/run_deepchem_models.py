@@ -61,12 +61,16 @@ if 'ext_datasets' in run_input:
 else:
     ext_dataset_names = []
 for level1 in ['train', 'val', 'test'] + ext_dataset_names:
-    for level2 in all_metrics['_order'] + ['y_stddev']:
+    for level2 in all_metrics['_order'] + ['y_stddev'] + ['loss']:
         header.append((level1, level2))
+    if run_input['training'].get('uncertainty'):
+        header.append((level1, 'uncertainty-error_pearson'))
+        header.append((level1, 'uncertainty-error_spearman'))
+        header.append((level1, 'uncertainty-error_kendall'))
 
 # Training info for each run:
 for level1 in ['training_info']:
-    for level2 in ['date', 'training_time', 'best_epoch', 'deepchem_version']:
+    for level2 in ['date', 'training_time', 'results_epoch', 'best_epoch', 'deepchem_version']:
         header.append((level1, level2))
 
 # Hyper parameters for each run:
@@ -133,6 +137,9 @@ load_data = GetDataset(**run_input['dataset'],
                        **run_input['preprocessing'],
                        DAGModel=DAGModel)
 dataset, additional_params, transformers = load_data()
+
+#if 'output_types' in run_input.keys():
+#    additional_params['output_types'] = run_input['output_types']
 
 print('Splitting dataset')
 # Split dataset:

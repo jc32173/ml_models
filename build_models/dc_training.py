@@ -12,10 +12,11 @@ import sys
 from itertools import product
 import random
 from datetime import datetime
+from scipy.stats import pearsonr, spearmanr, kendalltau
 
 from build_models.dc_metrics import all_metrics, calc_stddev #, y_stddev
 metrics_ls = [all_metrics[m] for m in all_metrics['_order']]
-from modified_deepchem.ExtendedGraphConvModel_ExtraDesc import ExtendedGraphConvModel_ExtraDesc
+#from modified_deepchem.ExtendedGraphConvModel_ExtraDesc import ExtendedGraphConvModel_ExtraDesc
 
 def get_hyperparams_grid(hyperparams, 
                          df_prev_hp=None):
@@ -123,7 +124,8 @@ class ValCallback():
             self.ext_test_scores[set_name] = []
             self.ext_test_preds[set_name] = [0]
 
-        self.best_mse = None
+        self.best_epoch = None
+        self.best_loss = None
 
         # Time to start training each epoch:
         self.training_t0 = datetime.now()
@@ -150,10 +152,11 @@ class ValCallback():
                                      transformers=self.transformers))
 
             # If best epoch, save predictions:
-            epoch_note=""
-            if np.argmin([i['mse'] for i in self.val_scores]) == len(self.val_scores) - 1:
-                epoch_note=" (Current best)"
-                self.best_mse = self.val_scores[-1]['mse']
+            epoch_note = ""
+            if np.argmin([i['loss'] for i in self.val_scores]) == len(self.val_scores) - 1:
+                epoch_note = " (Current best)"
+                self.best_epoch = stp // (self.n_batches_per_epoch) #*self.log_freq)
+                self.best_loss = self.val_scores[-1]['loss']
 
                 if self.test_set:
                     self.test_preds[0] = mdl.predict(self.test_set, 
@@ -174,19 +177,18 @@ class ValCallback():
                                                                        transformers=self.transformers)
 
             self.training_t1 = datetime.now()
-
-            print('Epoch: {}, MSE (loss): Training: {}, Validation: {} (Time: {}){}'.format(
-                stp/self.n_batches_per_epoch, 
-                self.train_scores[-1]['mse'], 
-                self.val_scores[-1]['mse'],
-                str((self.training_t1 - self.training_t0)).split('.')[0])
-                epoch_note, flush=True)
+            print('Epoch: {:d}, MSE (loss): Training: {}, Validation: {} (Time: {}){}'.format(
+                stp//self.n_batches_per_epoch,
+                self.train_scores[-1]['loss'],
+                self.val_scores[-1]['loss'],
+                str((self.training_t1 - self.training_t0)).split('.')[0],
+                epoch_note, flush=True))
 
             self.training_t0 = self.training_t1
 
 
 def train_model(mod_i, 
-                model_fn_str, 
+                model_fn_str,
                 hyperparams, 
                 additional_params, 
                 epochs, 
@@ -197,7 +199,9 @@ def train_model(mod_i,
                 # Not read here, but keep to avoid errors:
                 hyperparam_search='',
                 separate_process='',
+                uncertainty=False,
                 early_stopping=False,
+                early_stopping_patience=50,
                 early_stopping_interval=50,
                 early_stopping_threshold=0.0001,
                 transformers=[], 
@@ -213,9 +217,19 @@ def train_model(mod_i,
     #    tf.random.set_seed(rand_seed+456)
 
     # Have to initialise model inside this function so that it is cleared when process stops:
+    print(uncertainty)
 
-    model = eval(model_fn_str)(**additional_params,
+    model = eval(model_fn_str)(uncertainty=uncertainty, #output_types,
+                               **additional_params,
                                **hyperparams)
+
+    # Add loss function to metrics:
+    # For some reason doesn't work with models without uncertainty - need to check this.
+    if uncertainty:
+        metrics_ls.append(dc.metrics.Metric(metric=lambda t, p: model._loss_fn(p, t, np.ones(len(p))).numpy(), name='loss', mode='regression'))
+    else:
+        from sklearn.metrics import mean_squared_error
+        metrics_ls.append(dc.metrics.Metric(metric=mean_squared_error, name='loss', mode='regression'))
 
     n_batches_per_epoch = math.ceil((train_set.X.shape[0]/(hyperparams['batch_size'] + 0.0)))
     val_cb = ValCallback(n_batches_per_epoch,
@@ -235,10 +249,40 @@ def train_model(mod_i,
     # GP optimisation tested in: /users/xpb20111/DeepChem/GraphConvModel/GraphConvModel_code_tests.ipynb
 
     # Training with early stopping:
-    # Based on: https://github.com/deepchem/deepchem/issues/1533
-    if early_stopping:
+    if early_stopping == True:
         current_epoch = 0
-        prev_mse = np.inf
+        prev_loss = np.inf
+        next_training_interval = min([early_stopping_patience, epochs])
+        while current_epoch < epochs:
+
+            model.fit(train_set,
+                      nb_epoch=next_training_interval,
+                      # Save checkpoints manually for best epoch:
+                      max_checkpoints_to_keep=epochs,
+                      checkpoint_interval=0,
+                      callbacks=[val_cb])
+            current_epoch += next_training_interval
+
+            loss_diff = prev_loss - val_cb.best_loss
+            if current_epoch == epochs:
+                print('Reached maximum number of epochs')
+            elif loss_diff <= early_stopping_threshold:
+                print('Early stopping: Change in best Valdation MSE '+\
+                      'over the last {} epochs was {:.3f} (< threshold ({}))'\
+                      .format(early_stopping_patience,
+                              loss_diff,
+                              early_stopping_threshold))
+                break
+            prev_loss = val_cb.best_loss
+            # Next training interval should be patience from the current best epoch:
+            next_training_interval = min([val_cb.best_epoch + early_stopping_patience - current_epoch, 
+                                          epochs - current_epoch])
+
+    # Original version of early stopping procedure:
+    # Based on: https://github.com/deepchem/deepchem/issues/1533
+    elif early_stopping == 'Interval':
+        current_epoch = 0
+        prev_loss = np.inf
         while current_epoch < epochs:
 
             model.fit(train_set,
@@ -249,16 +293,16 @@ def train_model(mod_i,
                       callbacks=[val_cb])
             current_epoch += early_stopping_interval
 
-            mse_diff = prev_mse - val_cb.best_mse
-            if mse_diff <= early_stopping_threshold:
+            loss_diff = prev_loss - val_cb.best_loss
+            if loss_diff <= early_stopping_threshold:
                 print('Early stopping: Change in best Valdation MSE '+\
                       'after epochs: {} and {} was {:.3f} (< threshold ({}))'\
                       .format(current_epoch-early_stopping_interval,
                               current_epoch,
-                              mse_diff,
+                              loss_diff,
                               early_stopping_threshold))
                 break
-            prev_mse = val_cb.best_mse
+            prev_loss = val_cb.best_loss
 
     # No early stopping:
     else:
@@ -280,15 +324,21 @@ def train_model(mod_i,
 
     # Save model details:
 
-    best_epoch = np.argmin([i['mse'] for i in val_cb.val_scores])
+    best_epoch = np.argmin([i['loss'] for i in val_cb.val_scores]) + 1
+    if best_epoch != val_cb.best_epoch:
+        sys.exit('ERROR')
+    if early_stopping:
+        results_epoch = best_epoch
+    else:
+        results_epoch = epochs
 
     # Save stats on dataset splits:
     for split_name, split_scores in [['train', val_cb.train_scores], 
                                      ['val', val_cb.val_scores],
                                      ['test', val_cb.test_scores]]:
         if split_scores:
-            for metric in all_metrics['_order']:
-                run_results[(split_name, metric)] = round(split_scores[best_epoch][metric], 3)
+            for metric in all_metrics['_order'] + ['loss']:
+                run_results[(split_name, metric)] = round(split_scores[results_epoch-1][metric], 3)
     for split_name, split_data in [['train', train_set], 
                                    ['val', val_set],
                                    ['test', test_set]]:
@@ -301,17 +351,18 @@ def train_model(mod_i,
                                                 #round(math.sqrt(np.var(split_data.y)), 3)
 
     # Save training details:
-    run_results[('training_info', 'date')] = datetime.now().strftime("%Y-%m-%d %H:%M"),
-    run_results[('training_info', 'training_time')] = str(training_t),
+    run_results[('training_info', 'date')] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    run_results[('training_info', 'training_time')] = str(training_t)
     if early_stopping and current_epoch < epochs:
-        run_results[('training_info', 'best_epoch')] = str(best_epoch)+'/'+str(current_epoch)+' early_stopping'
+        run_results[('training_info', 'results_epoch')] = str(results_epoch)+'/'+str(current_epoch)+' early_stopping'
     else:
-        run_results[('training_info', 'best_epoch')] = str(best_epoch)+'/'+str(epochs)
+        run_results[('training_info', 'results_epoch')] = str(results_epoch)+'/'+str(epochs)
+    run_results[('training_info', 'best_epoch')] = str(best_epoch)
 
     # Save stats on external test sets:
     for set_name, set_scores in val_cb.ext_test_scores.items():
-        for metric in all_metrics['_order']:
-            run_results[(set_name, metric)] = round(set_scores[best_epoch][metric], 3)
+        for metric in all_metrics['_order'] + ['loss']:
+            run_results[(set_name, metric)] = round(set_scores[results_epoch-1][metric], 3)
 
         run_results[(set_name, 'y_stddev')] = round(math.sqrt(np.var(ext_test_set[set_name].y)), 3)
 
@@ -324,13 +375,6 @@ def train_model(mod_i,
     if 'N_PCA_feats' in run_results['training_info'].index:
         run_results[('training_info', 'N_PCA_feats')] = additional_params.get('N_PCA_feats')
 
-    # Write output?
-    run_results[('model_info', 'model_number')] = mod_i
-    out_file.write(';'.join([str(i) for i in run_results.to_list()])+'\n')
-
-    # Ensure results are written to file after each model:
-    out_file.flush()
-
     # Output predictions:
     if test_set:
         pk.dump([val_cb.test_set.ids, val_cb.test_preds], open('GCNN_test_preds_model'+str(mod_i)+'.pk', 'wb'))
@@ -341,9 +385,43 @@ def train_model(mod_i,
 
     # Output neural fingerprints:
     if dump_fps:
-        pk.dump([[val_cb.train_set.ids, val_cb.train_neural_fps],
-                 [val_cb.val_set.ids, val_cb.val_neural_fps],
-                 [val_cb.test_set.ids, val_cb.test_neural_fps]], open('GCNN_neural_fps_model'+str(mod_i)+'.pk', 'wb'))
+        dump_fps_ls = [[val_cb.train_set.ids, val_cb.train_neural_fps],
+                       [val_cb.val_set.ids, val_cb.val_neural_fps]]
+        if test_set:
+            dump_fps_ls.append([val_cb.test_set.ids, val_cb.test_neural_fps])
+        pk.dump(dump_fps_ls, open('GCNN_neural_fps_model'+str(mod_i)+'.pk', 'wb'))
+
+    # Output stats on uncertainty prediction:
+    # Probably just need pearson r/spearman r on datasets and individual uncertainties
+    if uncertainty:
+        try:
+            def get_uncertainty_correlation(dataset_name, dataset):
+                uncert = model.predict_uncertainty(dataset)[1].squeeze()
+                pred_error = np.abs(model.predict(dataset, transformers=transformers).squeeze() - \
+                        dataset.y.squeeze())
+                run_results[(dataset_name, 'uncertainty-error_pearson')] = pearsonr(uncert, pred_error)[0]
+                run_results[(dataset_name, 'uncertainty-error_spearman')] = spearmanr(uncert, pred_error)[0]
+                run_results[(dataset_name, 'uncertainty-error_kendall')] = kendalltau(uncert, pred_error)[0]
+                return uncert
+
+            train_uncert = get_uncertainty_correlation('train', train_set)
+            val_uncert = get_uncertainty_correlation('val', val_set)
+            if test_set:
+                test_uncert = get_uncertainty_correlation('test', test_set)
+                pk.dump([val_cb.test_set.ids, test_uncert], open('GCNN_test_preds_uncert_model'+str(mod_i)+'.pk', 'wb'))
+            for set_name, ext_dataset in ext_test_set.items():
+                ext_uncert = get_uncertainty_correlation(set_name, ext_dataset)
+                pk.dump([val_cb.ext_test_set[set_name].ids, test_uncert], open('GCNN_ext_test_preds_uncert_model'+str(mod_i)+'_'+set_name+'.pk', 'wb'))
+
+        except ValueError as err_str:
+            print('WARNING:', err_str)
+
+    # Write output?
+    run_results[('model_info', 'model_number')] = mod_i
+    out_file.write(';'.join([str(i) for i in run_results.to_list()])+'\n')
+
+    # Ensure results are written to file after each model:
+    out_file.flush()
 
     # Clear keras internal state, otherwise this causes the job to run out of memory after a few loops:
     # https://www.tensorflow.org/api_docs/python/tf/keras/backend/clear_session
