@@ -256,6 +256,9 @@ class GetDataset():
 
         self.additional_params['n_atom_feat'] = n_feat
 
+        if type(dataset.X[0]) == dc.feat.mol_graphs.WeaveMol:
+            self.additional_params['n_pair_feat'] = dataset.X[0].get_pair_features().shape[1]
+
         # Have to transform dataset if DAG:
         # Normalisation is done later
         #if self.DAGModel:

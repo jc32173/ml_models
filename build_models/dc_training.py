@@ -319,6 +319,8 @@ def train_model(mod_i,
     #for add_param, add_val in additional_params.items():
     #    run_results[('training_info', add_param)] = add_val
     run_results[('training_info', 'n_atom_feat')] = additional_params.get('n_atom_feat')
+    if 'Weave' in model_fn_str:
+        run_results[('training_info', 'n_pair_feat')] = additional_params.get('n_pair_feat')
     if 'N_PCA_feats' in run_results['training_info'].index:
         run_results[('training_info', 'N_PCA_feats')] = additional_params.get('N_PCA_feats')
 

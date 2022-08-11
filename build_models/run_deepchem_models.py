@@ -95,6 +95,8 @@ run_results[('training_info', 'slurm_jobid')] = os.environ.get('SLURM_JOB_ID')
 
 # Add in extra columns here, eventually make this not hard coded:
 run_results[('training_info', 'n_atom_feat')] = np.nan
+if 'Weave' in run_input['training']['model_fn_str']:
+    run_results[('training_info', 'n_pair_feat')] = np.nan
 if 'feature_selection' in run_input.keys() and \
    run_input['feature_selection'].get('selection_method') == 'PCA':
     run_results[('training_info', 'N_PCA_feats')] = np.nan
