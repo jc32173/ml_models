@@ -410,8 +410,22 @@ def train_val_test_split(dataset,
         val_set = val_test_set.select(val_idx)
         test_set = val_test_set.select(test_idx)
 
-    elif split_method == 'predefinied_lipo':
+    elif split_method == 'predefined_lipo':
+
+        # Split using predefined split used in MoleculeNet benchmark:
+
         train_set, val_set, test_set = get_lipo_split(dataset)
+
+    elif split_method == 'predefined':
+
+        # Split using predefined split based on separate column:
+
+        df = pd.read_csv(dataset_file)
+        c = df[strat_field]
+
+        train_set = dataset.select(df.loc[c == 'train'].index)
+        val_set = dataset.select(df.loc[c == 'val'].index)
+        test_set = dataset.select(df.loc[c == 'test'].index)
 
     # Normalise transformer:
 
