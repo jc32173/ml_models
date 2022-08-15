@@ -6,6 +6,8 @@ import math
 
 # Define deepchem metrics:
 
+# Regression:
+
 r2 = dc.metrics.Metric(metric=r2_score, name='r2')
 rmsd = dc.metrics.Metric(metric=dc.metrics.rms_score, name='rmsd')
 mse = dc.metrics.Metric(metric=mean_squared_error, name='mse')
@@ -31,14 +33,41 @@ def calc_stddev(y,
     stddev = np.std(y)
     return stddev
 
-all_metrics = {'r2' : r2,
-               'rmsd' : rmsd, 
-               'mse' : mse,
-               'bias' : bias,
-               'sdep' : sdep,
-               'mae' : mae,
-               'pearson' : pearson,
-               'spearman' : spearman, 
-               'kendall' : kendall,
-               '_order' : ['r2', 'rmsd', 'mse', 'bias', 'sdep', 
-                           'mae', 'pearson', 'spearman', 'kendall']}
+# Classification:
+
+accuracy = dc.metrics.Metric(metric=dc.metrics.accuracy_score, name='accuracy', mode='classification') #, n_classes=10)
+accuracy.classification_handling_mode = "threshold-one-hot"
+
+#balanced_accuracy = dc.metrics.Metric(metric=dc.metrics.balanced_accuracy_score, name='balanced_accuracy', mode='classification')
+#balanced_accuracy.classification_handling_mode = "threshold-one-hot"
+
+#matthews_corrcoef = dc.metrics.Metric(metric=dc.metrics.matthews_corrcoef, name='matthews_corrcoef', mode='classification')
+#matthews_corrcoef.classification_handling_mode = "threshold-one-hot"
+
+recall = dc.metrics.Metric(metric=lambda t, p : dc.metrics.recall_score(t, p, average='micro'), name='recall', mode='classification')
+recall.classification_handling_mode = "threshold-one-hot"
+
+precision = dc.metrics.Metric(metric=lambda t, p : dc.metrics.precision_score(t, p, average='micro'), name='precision', mode='classification')
+precision.classification_handling_mode = "threshold-one-hot"
+
+
+all_metrics = {'regression' : {'r2' : r2,
+                               'rmsd' : rmsd, 
+                               'mse' : mse,
+                               'bias' : bias,
+                               'sdep' : sdep,
+                               'mae' : mae,
+                               'pearson' : pearson,
+                               'spearman' : spearman, 
+                               'kendall' : kendall,
+                               '_order' : ['r2', 'rmsd', 'mse', 'bias', 'sdep', 
+                                           'mae', 'pearson', 'spearman', 'kendall']}, 
+               'classification' : {'accuracy' : accuracy,
+                                  #'balanced_accuracy' : balanced_accuracy,
+                                  #'matthews_corrcoef' : matthews_corrcoef,
+                                   'recall' : recall,
+                                   'precision' : precision,
+                                   '_order' : ['accuracy', #'balanced_accuracy', 
+                                              #'matthews_corrcoef', 
+                                               'recall', 'precision'
+                                               ]}}

@@ -3,6 +3,7 @@
         "notes" : "Run on ..."
     },
     "dataset" : {
+        "mode" : "regression",
         "dataset_file" : "/users/xpb20111/Solubility/Datasets/From_Jonny/From_Jonny.csv",
         "tasks" : ["Mean log(S0)"],
         "feature_field" : "SMILES",

@@ -15,7 +15,7 @@ from datetime import datetime
 from scipy.stats import pearsonr, spearmanr, kendalltau
 
 from build_models.dc_metrics import all_metrics, calc_stddev #, y_stddev
-metrics_ls = [all_metrics[m] for m in all_metrics['_order']]
+#metrics_ls = [all_metrics[m] for m in all_metrics['_order']]
 #from modified_deepchem.ExtendedGraphConvModel_ExtraDesc import ExtendedGraphConvModel_ExtraDesc
 
 def get_hyperparams_grid(hyperparams, 
@@ -94,17 +94,22 @@ class ValCallback():
 
     def __init__(self, 
                  n_batches_per_epoch, 
+                 #mode='regression',
                  train_set, 
 		 val_set, 
 		 test_set, 
+                 metrics_ls=[],
 		 ext_test_set={}, 
                  transformers=[],
                  dump_fps=False,
-                 log_freq=1):
+                 log_freq=1,
+                 n_classes=None):
 
         self.n_batches_per_epoch = n_batches_per_epoch
+        self.metrics_ls = metrics_ls
         self.log_freq = int(log_freq)
         self.dump_fps = dump_fps
+        self.n_classes = n_classes
 
         self.train_set = train_set
         self.val_set = val_set
@@ -134,22 +139,26 @@ class ValCallback():
 
         if stp % (self.n_batches_per_epoch*self.log_freq) == 0:
             self.train_scores.append(mdl.evaluate(self.train_set, 
-                                                  metrics=metrics_ls, 
-                                                  transformers=self.transformers))
+                                                  metrics=self.metrics_ls, 
+                                                  transformers=self.transformers,
+                                                  n_classes=self.n_classes))
             self.val_scores.append(mdl.evaluate(self.val_set, 
-                                                metrics=metrics_ls, 
-                                                transformers=self.transformers))
+                                                metrics=self.metrics_ls, 
+                                                transformers=self.transformers,
+                                                n_classes=self.n_classes))
             if self.test_set:
                 self.test_scores.append(mdl.evaluate(self.test_set, 
-                                                     metrics=metrics_ls, 
-                                                     transformers=self.transformers))
+                                                     metrics=self.metrics_ls, 
+                                                     transformers=self.transformers,
+                                                     n_classes=self.n_classes))
 
             if len(self.ext_test_set) > 0:
                 for set_name in self.ext_test_set.keys():
                     self.ext_test_scores[set_name].append(
                         mdl.evaluate(self.ext_test_set[set_name], 
-                                     metrics=metrics_ls, 
-                                     transformers=self.transformers))
+                                     metrics=self.metrics_ls, 
+                                     transformers=self.transformers,
+                                     n_classes=self.n_classes))
 
             # If best epoch, save predictions:
             epoch_note = ""
@@ -177,7 +186,7 @@ class ValCallback():
                                                                        transformers=self.transformers)
 
             self.training_t1 = datetime.now()
-            print('Epoch: {:d}, MSE (loss): Training: {}, Validation: {} (Time: {}){}'.format(
+            print('Epoch: {:d}, Loss: Training: {}, Validation: {} (Time: {}){}'.format(
                 stp//self.n_batches_per_epoch,
                 self.train_scores[-1]['loss'],
                 self.val_scores[-1]['loss'],
@@ -208,7 +217,8 @@ def train_model(mod_i,
                 out_file=None,
                 dump_fps=False,
                 run_results={},
-                rand_seed=None):
+                rand_seed=None, 
+                all_metrics=all_metrics):
 
     # Set random seeds for numpy and tensorflow to make reproducible:
     # Doesn't need to be set here as is already set in run_deepchem_models.py
@@ -223,22 +233,36 @@ def train_model(mod_i,
                                **additional_params,
                                **hyperparams)
 
+    # Get list of metrics for regression or classification models:
+    all_metrics = all_metrics[additional_params['mode']]
+    metrics_ls = [all_metrics[m] for m in all_metrics['_order']]
+
     # Add loss function to metrics:
     # For some reason doesn't work with models without uncertainty - need to check this.
     if uncertainty:
         metrics_ls.append(dc.metrics.Metric(metric=lambda t, p: model._loss_fn(p, t, np.ones(len(p))).numpy(), name='loss', mode='regression'))
-    else:
+    elif additional_params['mode'] == 'regression':
         from sklearn.metrics import mean_squared_error
         metrics_ls.append(dc.metrics.Metric(metric=mean_squared_error, name='loss', mode='regression'))
+    else:
+        loss = dc.metrics.Metric(metric=lambda t, p: 
+                                 model._loss_fn.loss._compute_tf_loss(tf.cast(t, tf.float32), 
+                                                                      tf.cast(p, tf.float32)).numpy(), 
+                                 name='loss', mode='classification', n_tasks=1)
+        loss.classification_handling_mode = "threshold-one-hot"
+        metrics_ls.append(loss)
 
     n_batches_per_epoch = math.ceil((train_set.X.shape[0]/(hyperparams['batch_size'] + 0.0)))
     val_cb = ValCallback(n_batches_per_epoch,
+                         #mode=additional_params['mode'],
                          train_set,
                          val_set,
                          test_set,
                          ext_test_set=ext_test_set,
+                         metrics_ls=metrics_ls,
                          transformers=transformers,
-                         dump_fps=dump_fps)
+                         dump_fps=dump_fps,
+                         n_classes=additional_params.get('n_classes'))
 
     # Fit model:
 
@@ -342,7 +366,7 @@ def train_model(mod_i,
     for split_name, split_data in [['train', train_set], 
                                    ['val', val_set],
                                    ['test', test_set]]:
-        if split_data:
+        if split_data and (additional_params['mode'] == 'regression'):
             # Need to think about this again:
             run_results[(split_name, 'y_stddev')] = calc_stddev(split_data.y, transformers)
         #run_results[(split_name, 'y_stddev')] = model.evaluate(split_data,
@@ -370,6 +394,8 @@ def train_model(mod_i,
     #for add_param, add_val in additional_params.items():
     #    run_results[('training_info', add_param)] = add_val
     run_results[('training_info', 'n_atom_feat')] = additional_params.get('n_atom_feat')
+    if additional_params['mode'] == 'classification':
+        run_results[('training_info', 'n_classes')] = additional_params['n_classes']
     if 'Weave' in model_fn_str:
         run_results[('training_info', 'n_pair_feat')] = additional_params.get('n_pair_feat')
     if 'N_PCA_feats' in run_results['training_info'].index:

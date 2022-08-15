@@ -259,6 +259,9 @@ class GetDataset():
         if type(dataset.X[0]) == dc.feat.mol_graphs.WeaveMol:
             self.additional_params['n_pair_feat'] = dataset.X[0].get_pair_features().shape[1]
 
+        if self.additional_params['mode'] == 'classification':
+            self.additional_params['n_classes'] = len(np.unique(dataset.y))
+
         # Have to transform dataset if DAG:
         # Normalisation is done later
         #if self.DAGModel:
@@ -338,13 +341,14 @@ class GetDataset():
 def train_val_test_split(dataset, 
                          split_method='rand', 
                          dataset_file=None, 
+                         mode='regression',
                          #id_field=None, 
                          strat_field=None, 
                          frac_train=0.7, 
                          frac_valid=0.15, 
                          frac_test=0.15, 
                          rand_seed=0, 
-                         transformer='norm',
+                         #transformer='norm',
                          transformers=[],
                          reshard_size=False):
 
@@ -429,7 +433,8 @@ def train_val_test_split(dataset,
 
     # Normalise transformer:
 
-    if transformer == 'norm':
+    #if transformer == 'norm':
+    if mode == 'regression':
         transformer = dc.trans.NormalizationTransformer(transform_y=True, 
                                                         dataset=train_set)
 

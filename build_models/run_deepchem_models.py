@@ -60,8 +60,15 @@ if 'ext_datasets' in run_input:
     ext_dataset_names = run_input['ext_datasets']['_order']
 else:
     ext_dataset_names = []
+mode = run_input['dataset'].get('mode')
+level2_metrics = []
+if mode is None:
+    mode = 'regression'
+if mode == 'regression':
+    level2_metrics = ['y_stddev']
+all_metrics = all_metrics[mode]
 for level1 in ['train', 'val', 'test'] + ext_dataset_names:
-    for level2 in all_metrics['_order'] + ['y_stddev'] + ['loss']:
+    for level2 in all_metrics['_order'] + level2_metrics + ['loss']:
         header.append((level1, level2))
     if run_input['training'].get('uncertainty'):
         header.append((level1, 'uncertainty-error_pearson'))
@@ -99,6 +106,8 @@ run_results[('training_info', 'slurm_jobid')] = os.environ.get('SLURM_JOB_ID')
 
 # Add in extra columns here, eventually make this not hard coded:
 run_results[('training_info', 'n_atom_feat')] = np.nan
+if mode == 'classification':
+    run_results[('training_info', 'n_classes')] = np.nan
 if 'Weave' in run_input['training']['model_fn_str']:
     run_results[('training_info', 'n_pair_feat')] = np.nan
 if 'feature_selection' in run_input.keys() and \
@@ -147,7 +156,8 @@ train_set, val_set, test_set, transformers = \
     train_val_test_split(dataset,
                          **run_input['splitting'],
                          dataset_file=run_input['dataset']['dataset_file'],
-                         transformer='norm',
+                         mode=run_input['dataset']['mode'],
+#                         transformer='norm',
                          transformers=transformers,
                          rand_seed=rand_seed)
 
