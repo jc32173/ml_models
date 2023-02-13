@@ -14,6 +14,7 @@ from modified_deepchem.CSVLoaderPreprocess import CSVLoaderPreprocess
 from modified_deepchem.CSVLoaderPreprocess_ExtraDesc import CSVLoaderPreprocess_ExtraDesc
 from modified_deepchem.ConvMolRISMFeaturizer import ConvMolRISMFeaturizer
 from modified_deepchem.PreprocessFeaturizerWrapper import PreprocessFeaturizerWrapper
+from modified_deepchem.WeaveFeaturizerWrapper import WeaveFeaturizerWrapper
 
 # Check for overlap between sets using:
 def check_data_split(train_set, val_set, test_split):

@@ -17,6 +17,7 @@ from scipy.stats import pearsonr, spearmanr, kendalltau
 from build_models.dc_metrics import all_metrics, calc_stddev #, y_stddev
 #metrics_ls = [all_metrics[m] for m in all_metrics['_order']]
 #from modified_deepchem.ExtendedGraphConvModel_ExtraDesc import ExtendedGraphConvModel_ExtraDesc
+from modified_deepchem.GraphConvClassifier import GraphConvClassifier
 
 def get_hyperparams_grid(hyperparams, 
                          df_prev_hp=None):
