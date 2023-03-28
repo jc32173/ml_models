@@ -440,7 +440,8 @@ def train_val_test_split(dataset,
                                                         dataset=train_set)
 
         train_set = transformer.transform(train_set)
-        val_set = transformer.transform(val_set)
+        if val_set:
+            val_set = transformer.transform(val_set)
         if test_set:
             test_set = transformer.transform(test_set)
 
@@ -448,7 +449,8 @@ def train_val_test_split(dataset,
 
     if reshard_size:
         train_set.reshard(reshard_size)
-        val_set.reshard(reshard_size)
+        if val_set:
+            val_set.reshard(reshard_size)
         if test_set:
             test_set.reshard(reshard_size)
 

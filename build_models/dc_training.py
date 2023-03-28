@@ -104,13 +104,15 @@ class ValCallback():
                  transformers=[],
                  dump_fps=False,
                  log_freq=1,
-                 n_classes=None):
+                 n_classes=None,
+                 n_epochs=None):
 
         self.n_batches_per_epoch = n_batches_per_epoch
         self.metrics_ls = metrics_ls
         self.log_freq = int(log_freq)
         self.dump_fps = dump_fps
         self.n_classes = n_classes
+        self.n_epochs = n_epochs
 
         self.train_set = train_set
         self.val_set = val_set
@@ -143,10 +145,11 @@ class ValCallback():
                                                   metrics=self.metrics_ls, 
                                                   transformers=self.transformers,
                                                   n_classes=self.n_classes))
-            self.val_scores.append(mdl.evaluate(self.val_set, 
-                                                metrics=self.metrics_ls, 
-                                                transformers=self.transformers,
-                                                n_classes=self.n_classes))
+            if self.val_set:
+                self.val_scores.append(mdl.evaluate(self.val_set,
+                                                    metrics=self.metrics_ls,
+                                                    transformers=self.transformers,
+                                                    n_classes=self.n_classes))
             if self.test_set:
                 self.test_scores.append(mdl.evaluate(self.test_set, 
                                                      metrics=self.metrics_ls, 
@@ -163,10 +166,14 @@ class ValCallback():
 
             # If best epoch, save predictions:
             epoch_note = ""
-            if np.argmin([i['loss'] for i in self.val_scores]) == len(self.val_scores) - 1:
-                epoch_note = " (Current best)"
-                self.best_epoch = stp // (self.n_batches_per_epoch) #*self.log_freq)
-                self.best_loss = self.val_scores[-1]['loss']
+            if (self.val_set and (np.argmin([i['loss'] for i in self.val_scores]) == len(self.val_scores) - 1)) or \
+               (stp//self.n_batches_per_epoch == self.n_epochs):
+                if (self.val_set and (np.argmin([i['loss'] for i in self.val_scores]) == len(self.val_scores) - 1)):
+                    epoch_note = " (Current best)"
+                    self.best_epoch = stp // (self.n_batches_per_epoch) #*self.log_freq)
+                    self.best_loss = self.val_scores[-1]['loss']
+                else:
+                    epoch_note = "(Final epoch)"
 
                 if self.test_set:
                     self.test_preds[0] = mdl.predict(self.test_set, 
@@ -174,7 +181,8 @@ class ValCallback():
 
                 if self.dump_fps:
                     self.train_neural_fps = mdl.predict_embedding(self.train_set)
-                    self.val_neural_fps = mdl.predict_embedding(self.val_set)
+                    if self.val_set:
+                        self.val_neural_fps = mdl.predict_embedding(self.val_set)
                     if self.test_set:
                         self.test_neural_fps = mdl.predict_embedding(self.test_set)
 
@@ -187,10 +195,15 @@ class ValCallback():
                                                                        transformers=self.transformers)
 
             self.training_t1 = datetime.now()
+            # Can only report validation loss if validation set has been given:
+            if self.val_scores:
+                epoch_val_loss = self.val_scores[-1]['loss']
+            else:
+                epoch_val_loss = np.nan
             print('Epoch: {:d}, Loss: Training: {}, Validation: {} (Time: {}){}'.format(
                 stp//self.n_batches_per_epoch,
                 self.train_scores[-1]['loss'],
-                self.val_scores[-1]['loss'],
+                epoch_val_loss,
                 str((self.training_t1 - self.training_t0)).split('.')[0],
                 epoch_note, flush=True))
 
@@ -263,7 +276,8 @@ def train_model(mod_i,
                          metrics_ls=metrics_ls,
                          transformers=transformers,
                          dump_fps=dump_fps,
-                         n_classes=additional_params.get('n_classes'))
+                         n_classes=additional_params.get('n_classes'),
+                         n_epochs=epochs)
 
     # Fit model:
 
@@ -348,10 +362,13 @@ def train_model(mod_i,
     pk.dump([val_cb.train_scores, val_cb.val_scores, val_cb.test_scores], open('GCNN_training_output_model'+str(mod_i)+'.pk', 'wb'))
 
     # Save model details:
-
-    best_epoch = np.argmin([i['loss'] for i in val_cb.val_scores]) + 1
-    if best_epoch != val_cb.best_epoch:
-        sys.exit('ERROR')
+    
+    if val_set:
+        best_epoch = np.argmin([i['loss'] for i in val_cb.val_scores]) + 1
+        if best_epoch != val_cb.best_epoch:
+            sys.exit('ERROR')
+    else:
+        best_epoch = np.nan
     if early_stopping:
         results_epoch = best_epoch
     else:
@@ -412,8 +429,9 @@ def train_model(mod_i,
 
     # Output neural fingerprints:
     if dump_fps:
-        dump_fps_ls = [[val_cb.train_set.ids, val_cb.train_neural_fps],
-                       [val_cb.val_set.ids, val_cb.val_neural_fps]]
+        dump_fps_ls = [[val_cb.train_set.ids, val_cb.train_neural_fps]]
+        if val_set:
+            dump_fps_ls.append([val_cb.val_set.ids, val_cb.val_neural_fps])
         if test_set:
             dump_fps_ls.append([val_cb.test_set.ids, val_cb.test_neural_fps])
         pk.dump(dump_fps_ls, open('GCNN_neural_fps_model'+str(mod_i)+'.pk', 'wb'))
@@ -432,7 +450,8 @@ def train_model(mod_i,
                 return uncert
 
             train_uncert = get_uncertainty_correlation('train', train_set)
-            val_uncert = get_uncertainty_correlation('val', val_set)
+            if val_set:
+                val_uncert = get_uncertainty_correlation('val', val_set)
             if test_set:
                 test_uncert = get_uncertainty_correlation('test', test_set)
                 pk.dump([val_cb.test_set.ids, test_uncert], open('GCNN_test_preds_uncert_model'+str(mod_i)+'.pk', 'wb'))

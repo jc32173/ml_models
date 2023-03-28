@@ -183,8 +183,9 @@ if 'DAG' in run_input['training']['model_fn_str']:
     transformer = dc.trans.DAGTransformer(max_atoms=max_atoms)
     train_set = transformer.transform(train_set)
     train_set.reshard(reshard_size)
-    val_set = transformer.transform(val_set)
-    val_set.reshard(reshard_size)
+    if val_set:
+        val_set = transformer.transform(val_set)
+        val_set.reshard(reshard_size)
     if test_set:
         test_set = transformer.transform(test_set)
         test_set.reshard(reshard_size)
@@ -221,7 +222,8 @@ if 'feature_selection' in run_input:
                                **run_input['feature_selection'], 
                                training_info=additional_params)
     train_set = feat_transformer.transform(train_set)
-    val_set = feat_transformer.transform(val_set)
+    if val_set:
+        val_set = feat_transformer.transform(val_set)
     if test_set:
         test_set = feat_transformer.transform(test_set)
     if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
