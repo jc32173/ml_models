@@ -457,7 +457,7 @@ def train_model(mod_i,
                 pk.dump([val_cb.test_set.ids, test_uncert], open('GCNN_test_preds_uncert_model'+str(mod_i)+'.pk', 'wb'))
             for set_name, ext_dataset in ext_test_set.items():
                 ext_uncert = get_uncertainty_correlation(set_name, ext_dataset)
-                pk.dump([val_cb.ext_test_set[set_name].ids, test_uncert], open('GCNN_ext_test_preds_uncert_model'+str(mod_i)+'_'+set_name+'.pk', 'wb'))
+                pk.dump([val_cb.ext_test_set[set_name].ids, ext_uncert], open('GCNN_ext_test_preds_uncert_model'+str(mod_i)+'_'+set_name+'.pk', 'wb'))
 
         except ValueError as err_str:
             print('WARNING:', err_str)
