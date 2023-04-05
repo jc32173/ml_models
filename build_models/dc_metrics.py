@@ -16,9 +16,27 @@ bias = dc.metrics.Metric(metric=lambda t, p: np.mean(p - t), name='bias', mode='
 sdep = dc.metrics.Metric(metric=lambda t, p: math.sqrt(np.mean(((p - t) - np.mean(p - t))**2)), name='sdep', mode='regression')
 
 mae = dc.metrics.Metric(metric=mean_absolute_error, name='mae')
-pearson = dc.metrics.Metric(metric=lambda t, p: pearsonr(t, p)[0], name='pearson', mode='regression')
-spearman = dc.metrics.Metric(metric=lambda t, p: spearmanr(t, p)[0], name='spearman', mode='regression')
-kendall = dc.metrics.Metric(metric=lambda t, p: kendalltau(t, p)[0], name='kendall', mode='regression')
+#pearson = dc.metrics.Metric(metric=lambda t, p: pearsonr(t, p)[0], name='pearson', mode='regression')
+#spearman = dc.metrics.Metric(metric=lambda t, p: spearmanr(t, p)[0], name='spearman', mode='regression')
+#kendall = dc.metrics.Metric(metric=lambda t, p: kendalltau(t, p)[0], name='kendall', mode='regression')
+
+def check_multiple_samples(fn, t, p):
+    if len(t) > 1:
+        return fn(t, p)
+    else:
+        return np.nan
+pearson = dc.metrics.Metric(
+    metric=lambda t, p: check_multiple_samples(lambda t, p: pearsonr(t, p)[0], t, p), 
+    name='pearson', 
+    mode='regression')
+spearman = dc.metrics.Metric(
+    metric=lambda t, p: check_multiple_samples(lambda t, p: spearmanr(t, p)[0], t, p), 
+    name='spearman', 
+    mode='regression')
+kendall = dc.metrics.Metric(
+    metric=lambda t, p: check_multiple_samples(lambda t, p: kendalltau(t, p)[0], t, p), 
+    name='kendall', 
+    mode='regression')
 
 # Don't add to list of metrics, but use with evaluate
 # so that transforms can be applied:

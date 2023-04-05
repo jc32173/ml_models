@@ -450,9 +450,9 @@ def train_model(mod_i,
                 return uncert
 
             train_uncert = get_uncertainty_correlation('train', train_set)
-            if val_set:
+            if val_set and len(val_set) > 1:
                 val_uncert = get_uncertainty_correlation('val', val_set)
-            if test_set:
+            if test_set and len(test_set) > 1:
                 test_uncert = get_uncertainty_correlation('test', test_set)
                 pk.dump([val_cb.test_set.ids, test_uncert], open('GCNN_test_preds_uncert_model'+str(mod_i)+'.pk', 'wb'))
             for set_name, ext_dataset in ext_test_set.items():
