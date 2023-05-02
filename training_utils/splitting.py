@@ -5,8 +5,7 @@ import deepchem as dc
 import pandas as pd
 import numpy as np
 import sys
-
-#sys.path.insert(0, '/users/xpb20111/programs/deepchem')
+import os
 
 
 # Check no overlap between data sets:
@@ -285,3 +284,65 @@ def train_test_split(data_ids,
         train_set_ids = data_ids[train_set_idxs]
         test_set_ids = data_ids[test_set_idxs]
         yield train_set_ids, test_set_ids
+
+
+def nested_CV_splits(train_val_test_split_filename,
+                     dataset_ids,
+                     run_input,
+                     rand_seed=None):
+    """
+    Produce nested train/validation/test splits.
+    """
+
+    # If previous train/val/test splits have been saved use these:
+    if os.path.isfile(train_val_test_split_filename):
+        print('Reading dataset splits from:', train_val_test_split_filename)
+        df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1], index_col=0)
+        #df_split_ids.set_index('ID', verify_integrity=True, inplace=True)
+
+    else:
+        print('Generating dataset splits and saving to:', train_val_test_split_filename)
+        df_split_ids = pd.DataFrame(data=[],
+                                    index=dataset_ids,
+                                    columns=pd.MultiIndex.from_tuples([], names=['resample', 'cv']))
+        df_split_ids.index.rename('ID', inplace=True)
+
+        outer_split_iter = train_test_split(dataset_ids,
+                                            **run_input['splitting']['outer_split'],
+                                            dataset_file=run_input['dataset']['dataset_file'],
+                                            rand_seed=rand_seed)
+
+        for resample_n, [train_val_ids, test_set_ids] in enumerate(outer_split_iter):
+
+            inner_split_iter = train_test_split(train_val_ids,
+                                                **run_input['splitting']['inner_split'],
+                                                dataset_file=run_input['dataset']['dataset_file'],
+                                                rand_seed=rand_seed)
+
+            for cv_n, [train_set_ids, val_set_ids] in enumerate(inner_split_iter):
+
+                check_dataset_split(train_set_ids,
+                                    val_set_ids,
+                                    test_set_ids,
+                                    n_samples=len(dataset_ids))
+
+                df_split_ids[(resample_n,
+                              cv_n)] = np.nan
+                df_split_ids[(resample_n,
+                              cv_n)].loc[train_set_ids] = 'train'
+                df_split_ids[(resample_n,
+                              cv_n)].loc[test_set_ids] = 'test'
+                df_split_ids[(resample_n,
+                              cv_n)].loc[val_set_ids] = 'val'
+
+            df_split_ids[(resample_n,
+                          'refit')] = np.nan
+            df_split_ids[(resample_n,
+                          'refit')].loc[set(train_set_ids) | set(val_set_ids)] = 'train'
+            df_split_ids[(resample_n,
+                          'refit')].loc[test_set_ids] = 'test'
+
+        # Save split assignments to file:
+        df_split_ids.to_csv(train_val_test_split_filename)
+
+    return df_split_ids

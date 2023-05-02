@@ -43,7 +43,7 @@ sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV')
 
 # Import code:
 from training_utils.record_results import setup_results_series
-from training_utils.splitting import train_test_split, check_dataset_split
+from training_utils.splitting import nested_CV_splits, train_test_split, check_dataset_split
 from deepchem_models.build_models.dc_metrics import all_metrics
 from deepchem_models.build_models.dc_preprocess import GetDataset, do_transforms, transform
 from deepchem_models.build_models.dc_training import get_hyperparams_grid, get_hyperparams_rand, train_score_model
@@ -197,57 +197,10 @@ if 'DAG' in run_input['training']['model_fn_str']:
 # Split dataset
 # =============
 
-# If previous train/val/test splits have been saved use these:
-if os.path.isfile(train_val_test_split_filename):
-    print('Reading dataset splits from:', train_val_test_split_filename)
-    df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1])
-    #df_split_ids.index.rename('ID', inplace=True)
-
-else:
-    print('Generating dataset splits and saving to:', train_val_test_split_filename)
-    df_split_ids = pd.DataFrame(data=[],
-                                index=full_dataset.ids,
-                                columns=pd.MultiIndex.from_tuples([], names=['resample', 'cv']))
-    df_split_ids.index.rename('ID', inplace=True)
-    #                 .set_index('ID', verify_integrity=True)
-
-    outer_split_iter = train_test_split(full_dataset.ids,
-                                        **run_input['splitting']['outer_split'],
-                                        dataset_file=run_input['dataset']['dataset_file'],
-                                        rand_seed=rand_seed)
-
-    for resample_n, [train_val_ids, test_set_ids] in enumerate(outer_split_iter):
-
-        inner_split_iter = train_test_split(train_val_ids,
-                                            **run_input['splitting']['inner_split'],
-                                            dataset_file=run_input['dataset']['dataset_file'],
-                                            rand_seed=rand_seed)
-
-        for cv_n, [train_set_ids, val_set_ids] in enumerate(inner_split_iter):
-
-            check_dataset_split(train_set_ids,
-                                val_set_ids,
-                                test_set_ids,
-                                n_samples=len(full_dataset))
-
-            df_split_ids[(resample_n, 
-                          cv_n)] = np.nan
-            df_split_ids[(resample_n, 
-                          cv_n)].loc[train_set_ids] = 'train'
-            df_split_ids[(resample_n, 
-                          cv_n)].loc[test_set_ids] = 'test'
-            df_split_ids[(resample_n, 
-                          cv_n)].loc[val_set_ids] = 'val'
-
-        df_split_ids[(resample_n,
-                      'refit')] = np.nan
-        df_split_ids[(resample_n,
-                      'refit')].loc[set(train_set_ids) | set(val_set_ids)] = 'train'
-        df_split_ids[(resample_n,
-                      'refit')].loc[test_set_ids] = 'test'
-
-    # Save split assignments to file:
-    df_split_ids.to_csv(train_val_test_split_filename)
+df_split_ids = nested_CV_splits(train_val_test_split_filename,
+                                full_dataset.ids,
+                                run_input,
+                                rand_seed=rand_seed)
 
 
 # =====================
@@ -365,11 +318,28 @@ pool.close()
 
 df_final_results.to_csv('GCNN_info_refit_models.csv', index=False)
 
-## Get average, standard deviation and standard error
-#df_av_results = \
-#df_final_results.drop(columns=['hyperparams'])\
-#                .agg()
-#                .to_csv('GCNN_average_results.csv')
-#
-#print('Average performance on test set:')
-#print(df_final_results['test'].mean().to_string(index=True))
+
+# =======================
+# Get average performance
+# =======================
+
+# Get average, standard deviation and standard error:
+df_av_results = pd.DataFrame()
+for dataset in ['train', 'test']:
+    df_agg = df_final_results[dataset].agg(['mean', 'std', 'sem']).T
+    df_agg.index.rename('metric', inplace=True)
+
+    # Calculate confidence intervals:
+    df_agg.loc['rmsd', 'CI95_lower'] = df_agg.loc['rmsd', 'mean']-1.69*df_agg.loc['rmsd', 'sem']
+    df_agg.loc['rmsd', 'CI95_upper'] = df_agg.loc['rmsd', 'mean']+1.69*df_agg.loc['rmsd', 'sem']
+
+    df_agg['dataset'] = dataset
+    df_agg = df_agg.set_index('dataset', append=True)\
+                   .reorder_levels(['dataset', 'metric'])
+
+    df_av_results = df_av_results.append(df_agg)
+
+df_av_results.to_csv('GCNN_info_av_performance.csv')
+
+print('Average performance on test set:')
+print(df_av_results.loc['test'].to_string(index=True))

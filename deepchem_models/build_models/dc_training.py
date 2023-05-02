@@ -45,9 +45,12 @@ def get_hyperparams_rand(hyperparams,
     Function to generate randomly chosen sets of hyperparameters.
     """
 
-    if rand_seed is not None:
-        np.random.seed(rand_seed)
-    else:
+    #if rand_seed is not None:
+    #    np.random.seed(rand_seed)
+    #else:
+    #    rand_seed = np.random.randint(4294967296, dtype=np.uint32)
+
+    if rand_seed is None:
         rand_seed = np.random.randint(4294967296, dtype=np.uint32)
 
     def hp_iter(hyperparams=hyperparams, rand_seed=rand_seed):
