@@ -56,7 +56,8 @@ all_model_results_filename = 'GCNN_info_all_models.csv'
 def setup_training(resample_n, cv_n, mod_i,
                    full_dataset, split_idxs,
                    hp_dict, run_input, 
-                   run_results={}, model_results=[]):
+                   run_results={}, model_results=[], 
+                   out_file=''):
 
     run_results[('model_info', 'resample_number')] = resample_n
     run_results[('model_info', 'cv_fold')] = cv_n
@@ -104,7 +105,8 @@ def setup_training(resample_n, cv_n, mod_i,
                                     ext_test_set=ext_test_set,
                                     run_results=run_results,
                                     **save_options,
-                                    rand_seed=rand_seed))))
+                                    rand_seed=rand_seed, 
+                                    out_file=out_file))))
 
                          
 # Read input details:
@@ -246,7 +248,7 @@ for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
     for mod_i, hp_dict in enumerate(hyperparam_iter):
 
         # Check whether set of hyperparameters have already been run:
-        if df_prev_runs and \
+        if (df_prev_runs is not None) and (len(df_prev_runs) > 0) and \
            np.all(np.array([(df_prev_runs[('model_info', 'resample_number')] == resample_n) & \
                             (df_prev_runs[('model_info', 'cv_fold')] == cv_n)] + \
                            [df_prev_runs[('hyperparams', hp_name)] == hp_val 
@@ -273,6 +275,7 @@ for model_result in model_results:
     df_model_result = model_result.get()
     resample_n, cv_n, mod_i = df_model_result['model_info'][['resample_number', 'cv_fold', 'model_number']]
     print('Finished training resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
+    #df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
     df_cv_results = df_cv_results.append(df_model_result, ignore_index=True)
 
     if df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n, 
@@ -298,6 +301,12 @@ for model_result in model_results:
                          .apply(eval)\
                          .to_dict()
 
+        # Average number of epochs if using early stopping:
+        if run_input['training'].get('early_stopping') == True:
+            print(df_cv_results['training_info']['epochs'])
+            run_input['training']['epochs'] = int(round(df_cv_results['training_info']['epochs'].mean(), 0))
+            run_input['training']['early_stopping'] = False
+
         cv_n = 'refit'
 
         split_idxs = df_split_ids.set_index((resample_n, cv_n))['idx']
@@ -306,7 +315,9 @@ for model_result in model_results:
         setup_training(resample_n, cv_n, mod_i,
                        full_dataset, split_idxs,
                        best_hp_dict, run_input,
-                       run_results, refit_models)
+                       run_results, refit_models, out_file=all_model_results_filename)
+
+#df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
 
 df_final_results = pd.DataFrame(columns=run_results.index)
 for model_result in refit_models:

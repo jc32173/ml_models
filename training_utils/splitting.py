@@ -272,6 +272,22 @@ def train_test_split(data_ids,
                                          )
         data_splits = splitter.split(data_ids, c)
 
+    elif split_method == 'murcko_split':
+
+        # Set up stratified split based on Murko scaffolds:
+
+        df = pd.read_csv(dataset_file)
+        df['scaffolds'] = \
+            [MurckoScaffoldSmiles(mol=Chem.MolFromSmiles(smi), 
+                                  includeChirality=False)
+             for smi in df[strat_field]]
+
+        splitter = StratifiedShuffleSplit(1,
+                                          test_size=1-frac_train,
+                                          random_state=rand_seed
+                                         )
+        data_splits = splitter.split(data_ids, c)
+
     elif split_method == 'predefined_lipo':
 
         # Split using predefined split used in MoleculeNet benchmark:

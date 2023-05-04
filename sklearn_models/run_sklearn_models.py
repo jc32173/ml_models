@@ -1,10 +1,13 @@
 
-#import warnings
-#warnings.filterwarnings('ignore')
+import warnings
+warnings.filterwarnings('ignore')
+
+import tensorflow as tf
 
 import multiprocessing as mp
 #from multiprocessing import Process
 from rdkit import Chem
+import deepchem as dc
 import pickle as pk
 import pandas as pd
 import numpy as np
@@ -15,17 +18,23 @@ import json
 import logging
 
 
+# Set log level for tensorflow:
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 # Set up logger for module:
 logger = logging.getLogger(__name__)
 # Set logging levels, especially when debugging:
 logging.getLogger().setLevel(logging.ERROR)
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
 #logging.getLogger().setLevel(logging.DEBUG)
+#logging.getLogger("tensorflow").setLevel(logging.DEBUG)
 
 
 # Set random seeds to make results fully reproducible:
 if len(sys.argv) >= 3:
     rand_seed = int(sys.argv[2])
     np.random.seed(rand_seed+123)
+    tf.random.set_seed(rand_seed+456)
 else:
     rand_seed = None
 
@@ -34,15 +43,70 @@ sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV')
 
 # Import code:
 from training_utils.record_results import setup_results_series
-from training_utils.splitting import train_test_split, check_dataset_split
-
-all_metrics ....
+from training_utils.splitting import nested_CV_splits, train_test_split, check_dataset_split
+from deepchem_models.build_models.dc_metrics import all_metrics
+from deepchem_models.build_models.dc_preprocess import GetDataset, do_transforms, transform
+from deepchem_models.build_models.dc_training import get_hyperparams_grid, get_hyperparams_rand, train_score_model
 
 # Hardcode standard filenames:
 train_val_test_split_filename = 'train_val_test_split.csv'
-#all_model_results_filename = 'GCNN_info_all_models.csv'
+all_model_results_filename = 'GCNN_info_all_models.csv'
 
 
+def setup_training(resample_n, cv_n, mod_i,
+                   full_dataset, split_idxs,
+                   hp_dict, run_input, 
+                   run_results={}, model_results=[]):
+
+    run_results[('model_info', 'resample_number')] = resample_n
+    run_results[('model_info', 'cv_fold')] = cv_n
+    run_results[('model_info', 'model_number')] = mod_i
+    for hp_name, hp_val in hp_dict.items():
+        run_results[('hyperparams', hp_name)] = hp_val
+
+    # Save models and predictions:
+    save_stage = ['all']
+    if 'cv_n' == 'refit':
+        save_stage.append('refit')
+    save_options = {}
+    for opt in ['save_model', 'save_predictions']:
+        if run_input['training'].get(opt) in save_stage:
+            save_options[opt] = True
+
+    if save_options.get('save_model'):
+        additional_params['model_dir'] = 'resample_{}_cv_{}_model_{}'.format(resample_n, cv_n, mod_i)
+
+    # Save dataset copy and reshard:
+    train_set = full_dataset.select(split_idxs['train'].to_list())
+    if 'val' in split_idxs.index:
+        val_set = full_dataset.select(split_idxs['val'].to_list())
+    else:
+        val_set = None
+    if 'test' in split_idxs.index:
+        test_set = full_dataset.select(split_idxs['test'].to_list())
+    else:
+        test_set = None
+
+    # Check dataset split:
+    check_dataset_split(*[dataset.ids for dataset in [train_set, val_set, test_set] 
+                          if dataset is not None], 
+                        n_samples=len(full_dataset.ids))
+
+    # Submit model for training:
+    model_results.append(
+        pool.apply_async(train_score_model,
+                         kwds=(dict(run_input=run_input,
+                                    hyperparams=hp_dict,
+                                    additional_params=additional_params,
+                                    train_set=train_set,
+                                    val_set=val_set,
+                                    test_set=test_set,
+                                    ext_test_set=ext_test_set,
+                                    run_results=run_results,
+                                    **save_options,
+                                    rand_seed=rand_seed))))
+
+                         
 # Read input details:
 json_infile = sys.argv[1]
 print('Reading input parameters from .json file: {}'.format(json_infile))
@@ -50,6 +114,12 @@ run_input = json.load(open(json_infile, 'r'))
 
 # Choose metrics for classification or regression:
 all_metrics = all_metrics[run_input['dataset']['mode']]
+
+# If using a GraphConv model, limit TF threads to 1 (otherwise seems to cause problems on Archie), other 
+# models seem to be alright and are able to run slightly faster when the number of threads is not set:
+if 'GraphConv' in run_input['training']['model_fn_str']:
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
 
 # Generate empty Series object to store results:
 run_results = setup_results_series(run_input, all_metrics)
@@ -59,30 +129,30 @@ run_results = setup_results_series(run_input, all_metrics)
 # Read any results from previous incomplete runs
 # ==============================================
 
-## File to save model details for each set of hyperparameters:
-#if not os.path.isfile(all_model_results_filename):
-#    df_prev_runs = None
-#    info_out = open(all_model_results_filename, 'w')
-#    info_out.write(';'.join(run_results.index.get_level_values(0))+'\n')
-#    info_out.write(';'.join(run_results.index.get_level_values(1))+'\n')
-#    # Need to flush here to ensure header is only written once and removed 
-#    # from buffer, otherwise header is written before the results from each model:
-#    info_out.flush()
-#    #mod_i = 0
-#
-## Read data from any previous runs:
-#else:
-#    df_prev = pd.read_csv(all_model_results_filename, sep=';', header=[0, 1])
-#    df_prev_runs = df_prev[[('model_info', 'resample_number'), 
-#                            ('model_info', 'cv_fold')] + \
-#                           [('hyperparams', hp_name) 
-#                            for hp_name in df_prev['hyperparams'].columns]]
-#    if len(set(df_prev.columns) & set(run_results.index)) != len(df_prev.columns):
-#        raise ValueError('')
-#    #mod_i = df_prev[('model_info', 'model_number')].max() + 1
-#    info_out = open(all_model_results_filename, 'a')
-#    # Check order of output matches existing column order:
-#    run_results = run_results[df_prev.columns]
+# File to save model details for each set of hyperparameters:
+if not os.path.isfile(all_model_results_filename):
+    df_prev_runs = None
+    info_out = open(all_model_results_filename, 'w')
+    info_out.write(';'.join(run_results.index.get_level_values(0))+'\n')
+    info_out.write(';'.join(run_results.index.get_level_values(1))+'\n')
+    # Need to flush here to ensure header is only written once and removed 
+    # from buffer, otherwise header is written before the results from each model:
+    info_out.flush()
+    #mod_i = 0
+
+# Read data from any previous runs:
+else:
+    df_prev = pd.read_csv(all_model_results_filename, sep=';', header=[0, 1])
+    df_prev_runs = df_prev[[('model_info', 'resample_number'), 
+                            ('model_info', 'cv_fold')] + \
+                           [('hyperparams', hp_name) 
+                            for hp_name in df_prev['hyperparams'].columns]]
+    if len(set(df_prev.columns) & set(run_results.index)) != len(df_prev.columns):
+        raise ValueError('')
+    #mod_i = df_prev[('model_info', 'model_number')].max() + 1
+    info_out = open(all_model_results_filename, 'a')
+    # Check order of output matches existing column order:
+    run_results = run_results[df_prev.columns]
 
 # Keep an empty copy to revert to after each run:
 run_results_empty = run_results.copy()
@@ -94,7 +164,7 @@ run_results_empty = run_results.copy()
 
 print('Loading dataset: {}'.format(run_input['dataset']['dataset_file']))
 
-# Load dataset:
+# Load dataset and calculate descriptors:
 load_data = GetDataset(**run_input['dataset'], 
                        **run_input['preprocessing'])
 full_dataset, additional_params = load_data()
@@ -112,8 +182,10 @@ if ('ext_datasets' in run_input) and len(run_input['ext_datasets']) > 0:
 # Split dataset
 # =============
 
-df_split_ids = split_dataset(train_val_test_split_filename, 
-                             run_input)
+df_split_ids = nested_CV_splits(train_val_test_split_filename,
+                                full_dataset[0].index,
+                                run_input,
+                                rand_seed=rand_seed)
 
 
 # =====================
@@ -140,9 +212,9 @@ df_split_ids = split_dataset(train_val_test_split_filename,
 # Train individual models
 # =======================
 
-n_cpus = run_input['training'].get('n_cpus')
-pool = mp.Pool(n_cpus)
-print('Training separate models on {} CPUs'.format(pool._processes))
+#n_cpus = run_input['training'].get('n_cpus')
+#pool = mp.Pool(n_cpus)
+#print('Training separate models on {} CPUs'.format(pool._processes))
 
 model_results = []
 
@@ -150,16 +222,9 @@ model_results = []
 df_split_ids.loc[full_dataset.ids, 'idx'] = range(len(full_dataset.ids))
 df_split_ids['idx'] = df_split_ids['idx'].astype(int)
 
-for resample_n in df_split_ids.drop(columns=['idx']).columns:
-#    if cv_n == 'refit':
-#        continue
-
-
-    mod = GridSearchCV
-
-
-
-
+for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
+    if cv_n == 'refit':
+        continue
 
     split_idxs = df_split_ids.set_index((resample_n, cv_n))['idx']
     hyperparam_iter = get_hyperparam_iter()
@@ -238,11 +303,28 @@ pool.close()
 
 df_final_results.to_csv('GCNN_info_refit_models.csv', index=False)
 
-## Get average, standard deviation and standard error
-#df_av_results = \
-#df_final_results.drop(columns=['hyperparams'])\
-#                .agg()
-#                .to_csv('GCNN_average_results.csv')
-#
-#print('Average performance on test set:')
-#print(df_final_results['test'].mean().to_string(index=True))
+
+# =======================
+# Get average performance
+# =======================
+
+# Get average, standard deviation and standard error:
+df_av_results = pd.DataFrame()
+for dataset in ['train', 'test']:
+    df_agg = df_final_results[dataset].agg(['mean', 'std', 'sem']).T
+    df_agg.index.rename('metric', inplace=True)
+
+    # Calculate confidence intervals:
+    df_agg.loc['rmsd', 'CI95_lower'] = df_agg.loc['rmsd', 'mean']-1.69*df_agg.loc['rmsd', 'sem']
+    df_agg.loc['rmsd', 'CI95_upper'] = df_agg.loc['rmsd', 'mean']+1.69*df_agg.loc['rmsd', 'sem']
+
+    df_agg['dataset'] = dataset
+    df_agg = df_agg.set_index('dataset', append=True)\
+                   .reorder_levels(['dataset', 'metric'])
+
+    df_av_results = df_av_results.append(df_agg)
+
+df_av_results.to_csv('GCNN_info_av_performance.csv')
+
+print('Average performance on test set:')
+print(df_av_results.loc['test'].to_string(index=True))

@@ -1,6 +1,6 @@
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import RFECV
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import KFold, RandomizedSearchCV, GridSearchCV
 
 import numpy as np
@@ -42,7 +42,12 @@ cv_tuning_stats = {}
 def init_params(init_param_grid=init_param_grid):
     return init_param_grid
 
-def tune_train_model(x_train, y_train, hyper_cv, init_param_grid=init_param_grid, n_jobs=-1): #, cv_tuning_stats=cv_tuning_stats):
+def tune_train_model(x_train, 
+                     y_train, 
+                     hyper_cv, 
+                     init_param_grid=init_param_grid, 
+                     model_type='regression', 
+                     n_jobs=-1): #, cv_tuning_stats=cv_tuning_stats):
 
     ## RFE:
     #rfe_rand_seed = 34
@@ -52,9 +57,13 @@ def tune_train_model(x_train, y_train, hyper_cv, init_param_grid=init_param_grid
     #rfecv.fit(x_train, y_train)
     #x_train_rfe = rfecv.transform(x_train)
 
-    # Run randomised search with k-fold crossvalidation
+    # Run randomised search with k-fold cross-validation
     #rf = RandomForestRegressor(random_state=rf_rand_seed)
-    rf_rand = RandomizedSearchCV(estimator = RandomForestRegressor(random_state=rf_rand_seed),
+    if model_type == 'regression':
+        estimator = RandomForestRegressor(random_state=rf_rand_seed)
+    elif model_type == 'classifier':
+        estimator = RandomForestClassifier(random_state=rf_rand_seed)
+    rf_rand = RandomizedSearchCV(estimator = estimator,
                                  param_distributions = init_param_grid,
                                  n_iter = 10,
                                  random_state = 5678,
