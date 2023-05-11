@@ -51,6 +51,7 @@ from deepchem_models.build_models.dc_training import get_hyperparams_grid, get_h
 # Hardcode standard filenames:
 train_val_test_split_filename = 'train_val_test_split.csv'
 all_model_results_filename = 'GCNN_info_all_models.csv'
+refit_model_results_filename = 'GCNN_info_refit_models.csv'
 
 
 def setup_training(resample_n, cv_n, mod_i,
@@ -108,7 +109,7 @@ def setup_training(resample_n, cv_n, mod_i,
                                     rand_seed=rand_seed, 
                                     out_file=out_file))))
 
-                         
+
 # Read input details:
 json_infile = sys.argv[1]
 print('Reading input parameters from .json file: {}'.format(json_infile))
@@ -261,7 +262,7 @@ for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
         setup_training(resample_n, cv_n, mod_i,
                        full_dataset, split_idxs,
                        hp_dict, run_input,
-                       run_results, model_results)
+                       run_results_empty.copy(), model_results) #, out_file=info_out)
 
 
 # ==================
@@ -276,12 +277,16 @@ for model_result in model_results:
     resample_n, cv_n, mod_i = df_model_result['model_info'][['resample_number', 'cv_fold', 'model_number']]
     print('Finished training resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
     #df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
+    if info_out:
+        info_out.write(';'.join([str(i) for i in df_model_result.to_list()])+'\n')
+        info_out.flush()
+
     df_cv_results = df_cv_results.append(df_model_result, ignore_index=True)
 
     if df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n, 
                          [('model_info', 'cv_fold')]]\
                     .nunique()\
-                    .squeeze() == run_input['splitting']['inner_split']['n_splits'] \
+                    .squeeze() == run_input['train_val_split']['n_splits'] \
        and \
        np.all(df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n]\
                            .groupby(('model_info', 'cv_fold'))\
@@ -315,7 +320,7 @@ for model_result in model_results:
         setup_training(resample_n, cv_n, mod_i,
                        full_dataset, split_idxs,
                        best_hp_dict, run_input,
-                       run_results, refit_models, out_file=all_model_results_filename)
+                       run_results_empty.copy(), refit_models) #, out_file=info_out)
 
 #df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
 

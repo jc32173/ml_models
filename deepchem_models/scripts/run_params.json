@@ -4,7 +4,7 @@
     },
     "dataset" : {
         "mode" : "regression",
-        "dataset_file" : "/users/xpb20111/programs/deepchem_dev_nested_CV/example_data/solubility.csv",
+        "dataset_file" : "../../example_data/solubility_challenge_loose_set.csv",
         "tasks" : ["Mean log(S0)"],
         "feature_field" : "SMILES",
         "id_field" : "ID",

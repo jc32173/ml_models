@@ -493,8 +493,8 @@ def train_score_model(train_set,
     # Write output:
     #run_results[('model_info', 'model_number')] = mod_i
     #with open(out_filename, 'a') as out_file:
-    if out_file:
-        out_file.write(';'.join([str(i) for i in run_results.to_list()])+'\n')
+    #if out_file:
+    #    out_file.write(';'.join([str(i) for i in run_results.to_list()])+'\n')
 
     # Clear keras internal state, otherwise this causes the job to run out of memory after a few loops:
     # https://www.tensorflow.org/api_docs/python/tf/keras/backend/clear_session

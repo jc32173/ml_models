@@ -46,7 +46,7 @@ def setup_results_series(run_input, all_metrics):
 
     # Fill in info from run_input:
     s_ls = []
-    for level1 in ['model_info', 'dataset', 'preprocessing', 'splitting', 'feature_selection', 'training']:
+    for level1 in ['model_info', 'dataset', 'preprocessing', 'train_test_split', 'train_val_split', 'feature_selection', 'training']:
         if level1 not in run_input.keys():
             continue
         s = pd.Series(data=run_input[level1])

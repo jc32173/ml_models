@@ -68,7 +68,7 @@ def get_lipo_split_ids(split_stage):
 
     check_dataset_split(train_set_ids, val_set_ids, test_split_ids)
 
-    if split_stage == 'outer':
+    if split_stage == 'train_test_split':
         yield np.concatenate([train_set_ids, val_set_ids]), test_set_ids
     else:
         yield train_set_ids, val_set_ids
@@ -323,19 +323,19 @@ def nested_CV_splits(train_val_test_split_filename,
                                     columns=pd.MultiIndex.from_tuples([], names=['resample', 'cv']))
         df_split_ids.index.rename('ID', inplace=True)
 
-        outer_split_iter = train_test_split(dataset_ids,
-                                            **run_input['splitting']['outer_split'],
-                                            dataset_file=run_input['dataset']['dataset_file'],
-                                            rand_seed=rand_seed)
+        train_test_split_iter = train_test_split(dataset_ids,
+                                                 **run_input['train_test_split'],
+                                                 dataset_file=run_input['dataset']['dataset_file'],
+                                                 rand_seed=rand_seed)
 
-        for resample_n, [train_val_ids, test_set_ids] in enumerate(outer_split_iter):
+        for resample_n, [train_val_ids, test_set_ids] in enumerate(train_test_split_iter):
 
-            inner_split_iter = train_test_split(train_val_ids,
-                                                **run_input['splitting']['inner_split'],
+            train_val_split_iter = train_test_split(train_val_ids,
+                                                **run_input['train_val_split'],
                                                 dataset_file=run_input['dataset']['dataset_file'],
                                                 rand_seed=rand_seed)
 
-            for cv_n, [train_set_ids, val_set_ids] in enumerate(inner_split_iter):
+            for cv_n, [train_set_ids, val_set_ids] in enumerate(train_val_split_iter):
 
                 check_dataset_split(train_set_ids,
                                     val_set_ids,

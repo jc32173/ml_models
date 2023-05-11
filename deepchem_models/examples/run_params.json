@@ -4,8 +4,8 @@
     },
     "dataset" : {
         "mode" : "regression",
-        "dataset_file" : "/users/xpb20111/programs/deepchem_dev_nested_CV/example_data/solubility.csv",
-        "tasks" : ["Mean log(S0)"],
+        "dataset_file" : "../../example_data/solubility_challenge_loose_set.csv",
+        "tasks" : ["Solubility"],
         "feature_field" : "SMILES",
         "id_field" : "ID",
         "rdkit_desc" : false
@@ -16,28 +16,23 @@
         "phmodel" : "OpenEye",
         "tauto" : true
     },
-    "splitting" : {
-	"outer_split" : {
-	    "split_method" : "murko_split",
-	    "strat_field" : "SMILES",
-	    "n_splits" : 2,
-            "frac_train" : 0.7,
-            "frac_test" : 0.3
-	},
-	"inner_split" : {
-	    "split_method" : "k-fold",
-	    "n_splits" : 2
-        }
+    "train_test_split" : {
+	"split_method" : "random",
+	"n_splits" : 2,
+        "frac_train" : 0.7,
+        "frac_test" : 0.3
+    },
+    "train_val_split" : {
+        "split_method" : "k-fold",
+	"n_splits" : 2
     },
     "training" : {
 	"n_cpus" : 1,
         "epochs" : 50,
         "model_fn_str" : "dc.models.GraphConvModel",
         "hyperparam_search" : "grid",
-        "early_stopping" : true,
-	"early_stopping_patience" : 10,
-        "early_stopping_threshold" : 0.0001,
-	"save_model" : false,
+        "early_stopping" : false,
+	"save_model" : "refit",
 	"save_predictions" : false,
         "save_fps" : false
     },
