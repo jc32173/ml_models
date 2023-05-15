@@ -310,6 +310,13 @@ def nested_CV_splits(train_val_test_split_filename,
     Produce nested train/validation/test splits.
     """
 
+    # Ensure dataset_ids are a numpy array:
+    if isinstance(dataset_ids, pd.core.frame.DataFrame) or \
+       isinstance(dataset_ids, pd.core.series.Series):
+        dataset_ids = dataset_ids.squeeze().to_numpy()
+    elif isinstance(dataset_ids, list):
+        dataset_ids = np.array(dataset_ids)
+
     # If previous train/val/test splits have been saved use these:
     if os.path.isfile(train_val_test_split_filename):
         print('Reading dataset splits from:', train_val_test_split_filename)
