@@ -127,6 +127,9 @@ if 'GraphConv' in run_input['training']['model_fn_str']:
 # Generate empty Series object to store results:
 run_results = setup_results_series(run_input, all_metrics)
 
+# Fill in any info constant over all runs:
+run_results[('training_info', 'deepchem_version')] = dc.__version__
+
 
 # ==============================================
 # Read any results from previous incomplete runs

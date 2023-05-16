@@ -2,7 +2,7 @@ from rdkit import Chem
 import numpy as np
 import pandas as pd
 import sys
-sys.path.insert(0, '/users/xpb20111/programs/useful_cheminfo_funcs')
+sys.path.insert(0, '/users/xpb20111/programs/cheminfo_utils')
 from smi_funcs import process_smiles, calc_rdkit_descs
 from deepchem.feat import Featurizer
 import logging

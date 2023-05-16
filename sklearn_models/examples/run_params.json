@@ -1,0 +1,43 @@
+{
+    "model_info" : {
+        "notes" : "Test run..."
+    },
+    "dataset" : {
+        "mode" : "regression",
+        "dataset_file" : "../../example_data/solubility_challenge_loose_set.csv",
+        "tasks" : ["Solubility"],
+        "feature_field" : "SMILES",
+        "id_field" : "ID",
+        "rdkit_desc" : false
+    },
+    "preprocessing" : {
+        "ph" : 7.4,
+        "phmodel" : "OpenEye",
+        "tauto" : true
+    },
+    "train_test_split" : {
+	"split_method" : "random",
+	"n_splits" : 2,
+        "frac_train" : 0.7,
+        "frac_test" : 0.3
+    },
+    "train_val_split" : {
+        "split_method" : "k-fold",
+	"n_splits" : 2
+    },
+    "training" : {
+	"n_cpus" : 1,
+        "model_fn_str" : "RandomForestRegressor()",
+        "hyperparam_search" : "random",
+	"n_iter" : 5,
+	"save_model" : "refit",
+	"save_predictions" : false
+    },
+    "hyperparams" : {
+        "n_estimators" : [20, 40],
+        "max_depth" : [5, 10],
+        "min_samples_split" : [2, 4],
+        "min_samples_leaf" : [1, 2],
+	"_order" : ["n_estimators", "max_depth", "min_samples_split", "min_samples_leaf"]
+    }
+}

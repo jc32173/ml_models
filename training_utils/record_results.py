@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import deepchem as dc
 import os
 
 def setup_results_series(run_input, all_metrics):
@@ -24,8 +23,8 @@ def setup_results_series(run_input, all_metrics):
     if run_input['dataset']['mode'] == 'regression':
         level2_metrics = ['y_stddev']
     for level1 in ['train', 'val', 'test'] + ext_dataset_names:
-        #for level2 in all_metrics['_order'] + level2_metrics + ['loss']:
-        for level2 in [m.name for m in all_metrics] + level2_metrics + ['loss']:
+        for level2 in all_metrics['_order'] + level2_metrics + ['loss']:
+        #for level2 in [m.name for m in all_metrics] + level2_metrics + ['loss']:
             header.append((level1, level2))
 
     # Training info for each run:
@@ -40,9 +39,6 @@ def setup_results_series(run_input, all_metrics):
 
     # Set up empty Series:
     run_results = pd.Series(index=pd.MultiIndex.from_tuples(header))
-
-    # Fill in any info constant over all runs:
-    run_results[('training_info', 'deepchem_version')] = dc.__version__
 
     # Fill in info from run_input:
     s_ls = []
