@@ -1,5 +1,5 @@
 
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
 #import warnings
 #warnings.filterwarnings('ignore')
@@ -17,11 +17,13 @@ import json
 import logging
 
 
+# Global logger:
+logging.basicConfig(level=logging.WARNING)
+
 # Set up logger for module:
 logger = logging.getLogger(__name__)
 # Set logging levels, especially when debugging:
-logging.getLogger().setLevel(logging.ERROR)
-#logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.WARNING)
 
 
 # Set random seeds to make results fully reproducible:
@@ -43,7 +45,7 @@ from cheminfo_utils.calc_desc import calc_desc
 
 #import sklearn
 from sklearn.ensemble import RandomForestRegressor
-#from sklearn_models.models import *
+from sklearn_models.models.models import *
 from sklearn_models.build_models.preprocess import GetDataset
 
 #all_metrics ....
@@ -133,27 +135,6 @@ df_split_ids = nested_CV_splits(train_val_test_split_filename,
                                 run_input,
                                 rand_seed=rand_seed)
 
-
-# =====================
-# Hyperparameter tuning
-# =====================
-
-## Exhaustive grid search:
-#if 'hyperparam_search' not in run_input['training'] or \
-#   run_input['training'].get('hyperparam_search') == 'grid':
-#    get_hyperparam_iter, n_hyperparams = get_hyperparams_grid(run_input['hyperparams'])
-#
-## Random search:
-#elif run_input['training']['hyperparam_search'] in ['rand', 'random']:
-#    get_hyperparam_iter, n_hyperparams = \
-#        get_hyperparams_rand(hyperparams=run_input['hyperparams'],
-#                             n_iter=run_input['training'].get('hyperparam_search_iterations'))
-#
-## GP:
-#elif run_input['training']['hyperparam_search'] == 'gp':
-#    raise NotImplementedError('GP not yet implemented')
-
-
 # =======================
 # Train individual models
 # =======================
@@ -161,8 +142,6 @@ df_split_ids = nested_CV_splits(train_val_test_split_filename,
 n_cpus = run_input['training'].get('n_cpus')
 #pool = mp.Pool(n_cpus)
 #print('Training separate models on {} CPUs'.format(pool._processes))
-
-#model_results = []
 
 # Add index number for selecting datasets:
 #df_split_ids.loc[x.index, 'idx'] = range(len(full_dataset.ids))
@@ -175,9 +154,7 @@ for resample_n in range(run_input['train_test_split']['n_splits']):
 
     train_val_ids = df_split_ids.loc[np.any(df_split_ids[str(resample_n)] != 'test', axis=1)].index
     train_val_set = full_dataset.loc[train_val_ids]
-    #train_val_set = full_dataset.loc[train_val_ids]
     test_set = full_dataset.loc[~df_split_ids.index.isin(train_val_ids)]
-    #test_set = full_dataset.loc[~df_split_ids.index.isin(train_val_ids)]
 
     # Get train/val splits for hyperparameter tuning:
     hyper_cv_splits = df_split_ids.loc[train_val_ids, str(resample_n)]
@@ -190,17 +167,34 @@ for resample_n in range(run_input['train_test_split']['n_splits']):
 
     model = eval(run_input['training']['model_fn_str'])
 
-    hyperparams = {hp: run_input['hyperparams'][hp] for hp in run_input['hyperparams'] if hp != '_order'}
+
+    # =====================
+    # Hyperparameter tuning
+    # =====================
+
+    hyperparams = {hp: run_input['hyperparams'][hp] for hp in run_input['hyperparams']['_order']}
     
-    model = RandomizedSearchCV(estimator = model,
-                               param_distributions = hyperparams, 
-                               #param_distributions = run_input['hyperparams'].drop(columns=['_order']),
-                               n_iter = run_input['training']['n_iter'],
-                               random_state = rand_seed+resample_n,
-                               cv = hyper_cv_splits,
-                               refit = True,
-                               verbose = 1,
-                               n_jobs = n_cpus)
+    # Exhaustive grid search:
+    if 'hyperparam_search' not in run_input['training'] or \
+       run_input['training'].get('hyperparam_search') == 'grid':
+        model = GridSearchCV(estimator=model,
+                             param_grid=hyperparams, 
+                             n_iter=run_input['training']['n_iter'],
+                             cv=hyper_cv_splits,
+                             refit=True,
+                             verbose=1,
+                             n_jobs=n_cpus)
+
+    # Random search:
+    elif run_input['training']['hyperparam_search'] in ['rand', 'random']:
+        model = RandomizedSearchCV(estimator=model,
+                                   param_distributions=hyperparams, 
+                                   n_iter=run_input['training']['n_iter'],
+                                   random_state=rand_seed+resample_n,
+                                   cv=hyper_cv_splits,
+                                   refit=True,
+                                   verbose=1,
+                                   n_jobs=n_cpus)
 
     model.fit(train_val_set.X,
               train_val_set.y.squeeze())
@@ -215,11 +209,8 @@ for resample_n in range(run_input['train_test_split']['n_splits']):
                 run_results=run_results)
 
     df_final_results = df_final_results.append(pd.DataFrame(run_results).T)
-    print(pd.DataFrame(run_results).T)
 
     print('Finished training resample: {}'.format(resample_n))
-
-print(df_final_results)
 
 
 # =======================
@@ -242,7 +233,7 @@ for dataset in ['train', 'test']:
 
     df_av_results = df_av_results.append(df_agg)
 
-df_av_results.to_csv('GCNN_info_av_performance.csv')
+df_av_results.to_csv(run_input['training']['model_fn_str']+'_info_av_performance.csv')
 
 print('Average performance on test set:')
 print(df_av_results.loc['test'].to_string(index=True))

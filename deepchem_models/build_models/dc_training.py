@@ -283,7 +283,8 @@ def train_model(train_set,
                                                                       tf.cast(p, tf.float32)).numpy(), 
                                  name='loss', mode='classification', n_tasks=1)
         loss.classification_handling_mode = "threshold-one-hot"
-    all_metrics.append(loss)
+    #all_metrics.append(loss)
+    all_metrics['loss'] = loss
 
     n_batches_per_epoch = math.ceil((train_set.X.shape[0]/(hyperparams['batch_size'] + 0.0)))
 
@@ -373,7 +374,7 @@ def score_model(model,
                 test_set=None,
                 ext_test_set={},
                 transformers=[],
-                all_metrics=[],
+                metrics_ls=[],
                 mode='regression',
                 n_classes=None,
                 run_results={},
@@ -389,11 +390,11 @@ def score_model(model,
                                 **ext_test_set}.items():
         if dataset:
             scores = model.evaluate(dataset,
-                                    metrics=all_metrics,
+                                    metrics=metrics_ls,
                                     transformers=transformers,
                                     n_classes=n_classes)
 
-            for metric in all_metrics:
+            for metric in metrics_ls:
                 run_results[(split_name, metric.name)] = round(scores[metric.name], 3)
 
             if mode == 'regression':
@@ -470,7 +471,7 @@ def train_score_model(train_set,
                 test_set=test_set,
                 ext_test_set=ext_test_set,
                 transformers=transformers,
-                all_metrics=all_metrics,
+                metrics_ls=[all_metrics[m] for m in all_metrics['_order']],
                 run_results=run_results)
 
     # Save model:

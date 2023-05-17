@@ -65,27 +65,27 @@ precision = dc.metrics.Metric(metric=lambda t, p : dc.metrics.precision_score(t,
 precision.classification_handling_mode = "threshold-one-hot"
 
 
-#all_metrics = {'regression' : {'r2' : r2,
-#                               'rmsd' : rmsd, 
-#                               'mse' : mse,
-#                               'bias' : bias,
-#                               'sdep' : sdep,
-#                               'mae' : mae,
-#                               'pearson' : pearson,
-#                               'spearman' : spearman, 
-#                               'kendall' : kendall,
-#                               '_order' : ['r2', 'rmsd', 'mse', 'bias', 'sdep', 
-#                                           'mae', 'pearson', 'spearman', 'kendall']}, 
-#               'classification' : {'accuracy' : accuracy,
-#                                  #'balanced_accuracy' : balanced_accuracy,
-#                                  #'matthews_corrcoef' : matthews_corrcoef,
-#                                   'recall' : recall,
-#                                   'precision' : precision,
-#                                   '_order' : ['accuracy', #'balanced_accuracy', 
-#                                              #'matthews_corrcoef', 
-#                                               'recall', 'precision'
-#                                               ]}}
+all_metrics = {'regression' : {'r2' : r2,
+                               'rmsd' : rmsd, 
+                               'mse' : mse,
+                               'bias' : bias,
+                               'sdep' : sdep,
+                               'mae' : mae,
+                               'pearson' : pearson,
+                               'spearman' : spearman, 
+                               'kendall' : kendall,
+                               '_order' : ['r2', 'rmsd', 'mse', 'bias', 'sdep', 
+                                           'mae', 'pearson', 'spearman', 'kendall']}, 
+               'classification' : {'accuracy' : accuracy,
+                                  #'balanced_accuracy' : balanced_accuracy,
+                                  #'matthews_corrcoef' : matthews_corrcoef,
+                                   'recall' : recall,
+                                   'precision' : precision,
+                                   '_order' : ['accuracy', #'balanced_accuracy', 
+                                              #'matthews_corrcoef', 
+                                               'recall', 'precision'
+                                               ]}}
 
-all_metrics = {'regression' : [r2, rmsd, mse, bias, sdep, mae, pearson, spearman, kendall],
-               'classification' : [accuracy, #balanced_accuracy, matthews_corrcoef,
-                                   recall, precision]}
+#all_metrics = {'regression' : [r2, rmsd, mse, bias, sdep, mae, pearson, spearman, kendall],
+#               'classification' : [accuracy, #balanced_accuracy, matthews_corrcoef,
+#                                   recall, precision]}

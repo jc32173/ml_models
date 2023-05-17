@@ -1,2 +1,0 @@
-Dataset;r2_score_test;rmsd_test;bias_test;rand_error_test;testset_stddev_test;pearsonr_test;spearmanr_test;mean_abs_error_testProperty;Model;Strat_class;Datapoints;y_stddev;Dataset;Descriptors;Datafile;sklearn_version;Dataset_notes;Av_(min_max)_predictions_per_mol;MC_CV;hyper_cv;Strat_split;corr_cut;n_const_descs;n_corr_variables;r2_score_training;rmsd_training;bias_training;rand_error_training;testset_stddev_training;pearsonr_training;spearmanr_training;mean_abs_error_training
-;Ridge;All_data

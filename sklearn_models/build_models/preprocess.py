@@ -79,12 +79,18 @@ class GetDataset():
             [('X', col) for col in self.extra_desc])
         df_data.set_index(('ids', id_field), drop=False, inplace=True)
 
-        # Remove any duplicate columns (e.g. if ID and feature
-        # fields are both SMILES):
+        # Remove any duplicate columns (e.g. if id_field and 
+        # feature_field are both SMILES):
         df_data = df_data.loc[:,~df_data.columns.duplicated()]
 
-        df_desc = calc_desc(df_data[feature_field])
-
+        df_desc = calc_desc(df_data[feature_field], 
+                            tauto=self.tauto,
+                            ph=self.ph,
+                            phmodel=self.phmodel,
+                            descriptors=self.descriptors,
+                            rm_na=False,
+                            rm_const=False,
+                            output_processed_smiles=False)
         df_desc.columns = pd.MultiIndex.from_tuples(
             [('X', col) for col in df_desc.columns])
 
@@ -94,7 +100,7 @@ class GetDataset():
                               right_index=True,
                               how='inner')
 
-#        if self.additional_params['mode'] == 'classification':
-#            self.additional_params['n_classes'] = len(np.unique(dataset.y))
+        if self.additional_params['mode'] == 'classification':
+            self.additional_params['n_classes'] = len(np.unique(dataset.y))
 
         return df_dataset, self.additional_params

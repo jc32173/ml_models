@@ -272,7 +272,7 @@ def train_test_split(data_ids,
                                          )
         data_splits = splitter.split(data_ids, c)
 
-    elif split_method == 'murcko_split':
+    elif split_method == 'murcko':
 
         # Set up stratified split based on Murko scaffolds:
 
@@ -307,7 +307,7 @@ def nested_CV_splits(train_val_test_split_filename,
                      run_input,
                      rand_seed=None):
     """
-    Produce nested train/validation/test splits.
+    Produce train/validation/test splits for nested CV.
     """
 
     # Ensure dataset_ids are a numpy array:
@@ -328,7 +328,14 @@ def nested_CV_splits(train_val_test_split_filename,
         df_split_ids = pd.DataFrame(data=[],
                                     index=dataset_ids,
                                     columns=pd.MultiIndex.from_tuples([], names=['resample', 'cv']))
-        df_split_ids.index.rename('ID', inplace=True)
+        # Make first level of column names strings:
+        #print(df_split_ids.columns)
+        #df_split_ids.columns = \
+        #    df_split_ids.columns.set_levels(df_split_ids.columns\
+        #                                                .levels[0]\
+        #                                                .astype(str), 
+        #                                    level=0)
+        #df_split_ids.index.rename('ID', inplace=True)
 
         train_test_split_iter = train_test_split(dataset_ids,
                                                  **run_input['train_test_split'],
@@ -336,6 +343,7 @@ def nested_CV_splits(train_val_test_split_filename,
                                                  rand_seed=rand_seed)
 
         for resample_n, [train_val_ids, test_set_ids] in enumerate(train_test_split_iter):
+            resample_n = str(resample_n)
 
             train_val_split_iter = train_test_split(train_val_ids,
                                                 **run_input['train_val_split'],
@@ -343,6 +351,7 @@ def nested_CV_splits(train_val_test_split_filename,
                                                 rand_seed=rand_seed)
 
             for cv_n, [train_set_ids, val_set_ids] in enumerate(train_val_split_iter):
+                cv_n = str(cv_n)
 
                 check_dataset_split(train_set_ids,
                                     val_set_ids,

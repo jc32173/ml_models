@@ -8,7 +8,7 @@
         "tasks" : ["Solubility"],
         "feature_field" : "SMILES",
         "id_field" : "ID",
-        "rdkit_desc" : false
+        "descriptors" : ["RDKit"]
     },
     "preprocessing" : {
         "ph" : 7.4,
@@ -27,17 +27,18 @@
     },
     "training" : {
 	"n_cpus" : 1,
-        "model_fn_str" : "RandomForestRegressor()",
+        "model_fn_str" : "RmCorrVar_RFR",
         "hyperparam_search" : "random",
 	"n_iter" : 5,
 	"save_model" : "refit",
 	"save_predictions" : false
     },
     "hyperparams" : {
-        "n_estimators" : [20, 40],
-        "max_depth" : [5, 10],
-        "min_samples_split" : [2, 4],
-        "min_samples_leaf" : [1, 2],
-	"_order" : ["n_estimators", "max_depth", "min_samples_split", "min_samples_leaf"]
+	"RmCorrVar__corr_cutoff" : [0.9, 0.95],
+        "RFR__n_estimators" : [20, 40],
+        "RFR__max_depth" : [5, 10],
+        "RFR__min_samples_split" : [2, 4],
+        "RFR__min_samples_leaf" : [1, 2],
+	"_order" : ["RmCorrVar__corr_cutoff", "RFR__n_estimators", "RFR__max_depth", "RFR__min_samples_split", "RFR__min_samples_leaf"]
     }
 }

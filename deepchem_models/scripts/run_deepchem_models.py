@@ -209,9 +209,9 @@ df_split_ids = nested_CV_splits(train_val_test_split_filename,
                                 rand_seed=rand_seed)
 
 
-# =====================
-# Hyperparameter tuning
-# =====================
+# ===========================
+# Setup hyperparameter tuning
+# ===========================
 
 # Exhaustive grid search:
 if 'hyperparam_search' not in run_input['training'] or \
@@ -252,12 +252,15 @@ for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
     for mod_i, hp_dict in enumerate(hyperparam_iter):
 
         # Check whether set of hyperparameters have already been run:
+        # THIS NEEDS MORE WORK!
         if (df_prev_runs is not None) and (len(df_prev_runs) > 0) and \
-           np.all(np.array([(df_prev_runs[('model_info', 'resample_number')] == resample_n) & \
-                            (df_prev_runs[('model_info', 'cv_fold')] == cv_n)] + \
-                           [df_prev_runs[('hyperparams', hp_name)] == hp_val 
-                            for hp_name, hp_val in hp_dict.items()]),
-                  axis=1) > 0:
+            np.any(
+                np.all(
+                    np.column_stack([(df_prev_runs[('model_info', 'resample_number')].astype(str) == str(resample_n)).to_list(),
+                                     (df_prev_runs[('model_info', 'cv_fold')].astype(str) == str(cv_n))] + \
+                                    [(df_prev_runs[('hyperparams', hp_name)].astype(str) == str(hp_val)).to_list()
+                                     for hp_name, hp_val in hp_dict.items()]), 
+                    axis=1)):
             continue
 
         print('Submitting resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
