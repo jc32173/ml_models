@@ -39,6 +39,7 @@ sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV')
 # Import code:
 from training_utils.record_results import setup_results_series
 from training_utils.splitting import nested_CV_splits, train_test_split, check_dataset_split
+from training_utils.model_scoring import get_average_model_performance
 from sklearn_models.build_models.training import score_model
 from sklearn_models.build_models.metrics import all_metrics
 from cheminfo_utils.calc_desc import calc_desc
@@ -223,23 +224,10 @@ for resample_n in range(run_input['train_test_split']['n_splits']):
 # =======================
 
 # Get average, standard deviation and standard error:
-df_av_results = pd.DataFrame()
-for dataset in ['train', 'test']:
-    df_agg = df_final_results[dataset].agg(['mean', 'std', 'sem']).T
-    df_agg.index.rename('metric', inplace=True)
-
-    # Calculate confidence intervals:
-    df_agg.loc['rmsd', 'CI95_lower'] = df_agg.loc['rmsd', 'mean']-1.69*df_agg.loc['rmsd', 'sem']
-    df_agg.loc['rmsd', 'CI95_upper'] = df_agg.loc['rmsd', 'mean']+1.69*df_agg.loc['rmsd', 'sem']
-
-    df_agg['dataset'] = dataset
-    df_agg = df_agg.set_index('dataset', append=True)\
-                   .reorder_levels(['dataset', 'metric'])
-
-    df_av_results = df_av_results.append(df_agg)
+df_av_results = \
+get_average_model_performance(df_final_results, mode=run_input['dataset']['mode'])
 
 df_av_results.to_csv(run_input['training']['model_fn_str']+'_info_av_performance.csv')
 
 print('Average performance on test set:')
 print(df_av_results.loc['test'].to_string(index=True))
-
