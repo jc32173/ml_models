@@ -40,7 +40,7 @@
     - `model_fn_str`: Name of model function.
     - `hyperparam_search`: `random` | `grid` Hyperparameter search strategy.
     - `n_iter`: Number of
-    - `save_model`: `all` | `refit` (*default*) | `false` Save checkpoint files for model at given stage.
+    - `save_model`: `all` | `resample` (*default*) | `false` Save checkpoint files for model at given stage, `all` - save all models, `resample` - save final model trained for each train/test resample, `final` - only save final model trained on all data.
     - `save_predictions`: `refit` | `final`
 
 - `hyperparams`: Hyperparameter names and possible values to search over.

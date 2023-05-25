@@ -30,7 +30,7 @@
         "model_fn_str" : "RmCorrVar_RFR",
         "hyperparam_search" : "random",
 	"n_iter" : 5,
-	"save_model" : "refit",
+	"save_model" : "resample",
 	"save_predictions" : false
     },
     "hyperparams" : {

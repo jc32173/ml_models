@@ -32,7 +32,7 @@
         "model_fn_str" : "dc.models.GraphConvModel",
         "hyperparam_search" : "grid",
         "early_stopping" : false,
-	"save_model" : "refit",
+	"save_model" : "resample",
 	"save_predictions" : false,
         "save_fps" : false
     },

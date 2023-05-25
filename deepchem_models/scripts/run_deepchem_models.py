@@ -68,8 +68,8 @@ def setup_training(resample_n, cv_n, mod_i,
 
     # Save models and predictions:
     save_stage = ['all']
-    if 'cv_n' == 'refit':
-        save_stage.append('refit')
+    if cv_n == 'refit':
+        save_stage.append('resample')
     save_options = {}
     for opt in ['save_model', 'save_predictions']:
         if run_input['training'].get(opt) in save_stage:

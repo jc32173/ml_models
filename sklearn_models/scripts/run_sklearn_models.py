@@ -208,6 +208,11 @@ for resample_n in range(run_input['train_test_split']['n_splits']):
                 mode=run_input['dataset']['mode'],
                 run_results=run_results)
 
+    if run_input['training'].get('save_model') == 'resample':
+        model_filename = run_input['training']['model_fn_str']+\
+                         '_resample_{}.pk'.format(resample_n)
+        pk.dump(model, open(model_filename, 'wb'))
+
     df_final_results = df_final_results.append(pd.DataFrame(run_results).T)
 
     print('Finished training resample: {}'.format(resample_n))
