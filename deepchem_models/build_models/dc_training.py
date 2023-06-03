@@ -17,6 +17,7 @@ import tempfile
 from deepchem_models.build_models.dc_metrics import all_metrics, calc_stddev
 from deepchem_models.build_models.dc_preprocess import transform
 #from modified_deepchem.GraphConvClassifier import GraphConvClassifier
+from deepchem_models.modified_deepchem.GraphConvModel_OptPooling import GraphConvModel_OptPooling
 
 
 def get_hyperparams_grid(hyperparams):
@@ -221,6 +222,7 @@ class EarlyStopCB():
 
         self.best_epoch = None
         self.best_val_loss = np.inf #None
+        self.ckpt_number = 0
 
         self.tmp_model_dir = tempfile.mkdtemp()
 
@@ -239,6 +241,7 @@ class EarlyStopCB():
                 # Save checkpoint for best model to restore after training:
                 mdl.save_checkpoint(max_checkpoints_to_keep=1,
                                     model_dir=self.tmp_model_dir)
+                self.ckpt_number += 1
 
 
 def train_model(train_set,
@@ -338,7 +341,8 @@ def train_model(train_set,
                       .format(early_stopping_patience,
                               loss_diff,
                               early_stopping_threshold))
-                best_ckpt_file = early_stop_cb.tmp_model_dir+'/ckpt-'+str(early_stop_cb.best_epoch)
+                #best_ckpt_file = early_stop_cb.tmp_model_dir+'/ckpt-'+str(early_stop_cb.best_epoch)
+                best_ckpt_file = early_stop_cb.tmp_model_dir+'/ckpt-'+str(early_stop_cb.ckpt_number)
                 model.restore(checkpoint=best_ckpt_file)
                 final_epoch = early_stop_cb.best_epoch
                 break
