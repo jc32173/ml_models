@@ -12,7 +12,7 @@ import sys
 
 from deepchem_models.modified_deepchem.PreprocessFeaturizerWrapper import PreprocessFeaturizerWrapper
 #from modified_deepchem.WeaveFeaturizerWrapper import WeaveFeaturizerWrapper
-
+from deepchem_models.modified_deepchem.FeaturizerOptDesc import ConvMolFeaturizer_OptDesc
 
 # Check no overlap between data sets:
 def check_dataset_split(train_set_ids=[],
