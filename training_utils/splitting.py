@@ -335,7 +335,7 @@ def nested_CV_splits(train_val_test_split_filename,
         #                                                .levels[0]\
         #                                                .astype(str), 
         #                                    level=0)
-        #df_split_ids.index.rename('ID', inplace=True)
+        df_split_ids.index.rename('ID', inplace=True)
 
         train_test_split_iter = train_test_split(dataset_ids,
                                                  **run_input['train_test_split'],
