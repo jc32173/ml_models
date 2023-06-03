@@ -44,6 +44,7 @@ sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV')
 # Import code:
 from training_utils.record_results import setup_results_series
 from training_utils.splitting import nested_CV_splits, train_test_split, check_dataset_split
+from training_utils.model_scoring import get_average_model_performance
 from deepchem_models.build_models.dc_metrics import all_metrics
 from deepchem_models.build_models.dc_preprocess import GetDataset, do_transforms, transform
 from deepchem_models.build_models.dc_training import get_hyperparams_grid, get_hyperparams_rand, train_score_model
@@ -54,11 +55,29 @@ all_model_results_filename = 'GCNN_info_all_models.csv'
 refit_model_results_filename = 'GCNN_info_refit_models.csv'
 
 
-def setup_training(resample_n, cv_n, mod_i,
-                   full_dataset, split_idxs,
-                   hp_dict, run_input, 
-                   run_results={}, model_results=[], 
-                   out_file=''):
+# Allow some hyperparameters to have string values:
+def eval_str(param):
+    """
+    Run eval() on string if possible, otherwise
+    just return string.
+    """
+    try:
+        out = eval(param)
+    except NameError:
+        out = param
+    return out
+
+
+def setup_run_training(run_input,
+                       additional_params,
+                       full_dataset,
+                       resample_n=0,
+                       cv_n=None,
+                       mod_i=0,
+                       split_idxs={},
+                       hp_dict={},
+                       run_results={},
+                       out_file=''):
 
     run_results[('model_info', 'resample_number')] = resample_n
     run_results[('model_info', 'cv_fold')] = cv_n
@@ -95,19 +114,20 @@ def setup_training(resample_n, cv_n, mod_i,
                         n_samples=len(full_dataset.ids))
 
     # Submit model for training:
-    model_results.append(
-        pool.apply_async(train_score_model,
-                         kwds=(dict(run_input=run_input,
-                                    hyperparams=hp_dict,
-                                    additional_params=additional_params,
-                                    train_set=train_set,
-                                    val_set=val_set,
-                                    test_set=test_set,
-                                    ext_test_set=ext_test_set,
-                                    run_results=run_results,
-                                    **save_options,
-                                    rand_seed=rand_seed, 
-                                    out_file=out_file))))
+    run_results = \
+    train_score_model(run_input=run_input,
+                      hyperparams=hp_dict,
+                      additional_params=additional_params,
+                      train_set=train_set,
+                      val_set=val_set,
+                      test_set=test_set,
+                      ext_test_set=ext_test_set,
+                      run_results=run_results,
+                      **save_options,
+                      rand_seed=rand_seed, 
+                      out_file=out_file)
+
+    return run_results
 
 
 # Read input details:
@@ -234,7 +254,13 @@ elif run_input['training']['hyperparam_search'] == 'gp':
 # =======================
 
 n_cpus = run_input['training'].get('n_cpus')
-pool = mp.Pool(n_cpus)
+
+# Add maxtasksperchild=1 to ensure that processes are only used once and so 
+# memory is cleared after each model.  This is important for DeepChem 
+# GraphConvModel models as they are not cleared from memory after training 
+# (see: https://github.com/deepchem/deepchem/issues/1133), but this is 
+# probably not required for other models.
+pool = mp.Pool(n_cpus, maxtasksperchild=1)
 print('Training separate models on {} CPUs'.format(pool._processes))
 
 model_results = []
@@ -265,10 +291,17 @@ for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
 
         print('Submitting resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
 
-        setup_training(resample_n, cv_n, mod_i,
-                       full_dataset, split_idxs,
-                       hp_dict, run_input,
-                       run_results_empty.copy(), model_results) #, out_file=info_out)
+        model_results.append(
+            pool.apply_async(setup_run_training,
+                             kwds=(dict(run_input=run_input,
+                                        additional_params=additional_params.copy(),
+                                        full_dataset=full_dataset,
+                                        resample_n=resample_n,
+                                        cv_n=cv_n,
+                                        mod_i=mod_i,
+                                        split_idxs=split_idxs,
+                                        hp_dict=hp_dict,
+                                        run_results=run_results_empty.copy()))))
 
 
 # ==================
@@ -309,12 +342,12 @@ for model_result in model_results:
         best_hp_dict = pd.Series(data=best_hp_idx.values.squeeze(),
                                  index=pd.MultiIndex.from_tuples(best_hp_idx.names))\
                          ['hyperparams']\
-                         .apply(eval)\
+                         .apply(eval_str)\
                          .to_dict()
 
         # Average number of epochs if using early stopping:
         if run_input['training'].get('early_stopping') == True:
-            print(df_cv_results['training_info']['epochs'])
+            #print(df_cv_results['training_info']['epochs'])
             run_input['training']['epochs'] = int(round(df_cv_results['training_info']['epochs'].mean(), 0))
             run_input['training']['early_stopping'] = False
 
@@ -323,10 +356,18 @@ for model_result in model_results:
         split_idxs = df_split_ids.set_index((resample_n, cv_n))['idx']
         print('Submitting resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
         
-        setup_training(resample_n, cv_n, mod_i,
-                       full_dataset, split_idxs,
-                       best_hp_dict, run_input,
-                       run_results_empty.copy(), refit_models) #, out_file=info_out)
+        refit_models.append(
+            pool.apply_async(setup_run_training,
+                             kwds=(dict(run_input=run_input,
+                                        additional_params=additional_params.copy(),
+                                        full_dataset=full_dataset,
+                                        resample_n=resample_n,
+                                        cv_n=cv_n,
+                                        mod_i=mod_i,
+                                        split_idxs=split_idxs,
+                                        hp_dict=best_hp_dict,
+                                        run_results=run_results_empty.copy(),
+                                        out_file=''))))
 
 #df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
 
@@ -349,7 +390,7 @@ df_final_results.to_csv('GCNN_info_refit_models.csv', index=False)
 df_av_results = \
 get_average_model_performance(df_final_results, mode=run_input['dataset']['mode'])
 
-df_av_results.to_csv(run_input['training']['model_fn_str']+'_info_av_performance.csv')
+df_av_results.to_csv(run_input['training']['model_fn_str'].split('.')[-1]+'_info_av_performance.csv')
 
 print('Average performance on test set:')
 print(df_av_results.loc['test'].to_string(index=True))
