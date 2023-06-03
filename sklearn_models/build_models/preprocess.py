@@ -26,6 +26,7 @@ class GetDataset():
                  feature_field='',
                  id_field='',
                  descriptors=[],
+                 fingerprints=[],
                  extra_desc=[],
                  mode='regression',
                  tauto=False,
@@ -48,6 +49,7 @@ class GetDataset():
         self.feature_field=feature_field
         self.id_field=id_field
         self.descriptors = descriptors
+        self.fingerprints = fingerprints
         self.extra_desc = extra_desc
         self.tauto = tauto
         self.ph = ph
@@ -83,20 +85,26 @@ class GetDataset():
         # feature_field are both SMILES):
         df_data = df_data.loc[:,~df_data.columns.duplicated()]
 
-        df_desc = calc_desc(df_data[feature_field], 
-                            tauto=self.tauto,
-                            ph=self.ph,
-                            phmodel=self.phmodel,
-                            descriptors=self.descriptors,
-                            rm_na=False,
-                            rm_const=False,
-                            output_processed_smiles=False)
-        df_desc.columns = pd.MultiIndex.from_tuples(
-            [('X', col) for col in df_desc.columns])
+        X_ls = []
+        if len(self.descriptors) > 0:
+            df_desc = calc_desc(df_data[feature_field], 
+                                tauto=self.tauto,
+                                ph=self.ph,
+                                phmodel=self.phmodel,
+                                descriptors=self.descriptors,
+                                fingerprints=self.fingerprints,
+                                rm_na=False,
+                                rm_const=False,
+                                output_processed_smiles=False)
+            df_desc.columns = pd.MultiIndex.from_tuples(
+                [('X', col) for col in df_desc.columns])
+            X_ls.append(df_desc)
+
+        df_X = pd.concat(X_ls, axis=1)
 
         df_dataset = pd.merge(left=df_data,
                               left_on=[(feature_field, feature_field)],
-                              right=df_desc,
+                              right=df_X,
                               right_index=True,
                               how='inner')
 

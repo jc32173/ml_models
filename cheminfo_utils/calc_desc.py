@@ -3,6 +3,7 @@
 import sys
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 from rdkit.ML.Descriptors import MoleculeDescriptors
 
 import numpy as np
@@ -15,7 +16,7 @@ from cheminfo_utils.smi_funcs import canonicalise_tautomer, correct_smiles, \
 
 # Process SMILES before calculating descriptors 
 # (canonicalise tautomer, correct smiles, adjust for ph)
-def process_smiles(smi, tauto=False, ph=None, phmodel=None):
+def process_smiles(smi, tauto=False, ph=None, phmodel=None): #, return_mol=True):
     warnings = ''
 
 #    if tauto == 'OpenEye':
@@ -57,11 +58,13 @@ def calc_desc(smi_ls,
               ph=False,
               phmodel=None,
               descriptors=['RDKit'],
+              fingerprints=[],
+              morgan_fps_opts={'radius' : 4},
               rm_na=True,
               rm_const=False,
               output_processed_smiles=False):
     """
-    Calculate descriptors.
+    Calculate descriptors/fingerprints.
     """
 
     if isinstance(smi_ls, str):
@@ -85,7 +88,11 @@ def calc_desc(smi_ls,
                                        phmodel=phmodel)[0] 
                         for smi in smi_ls]
 
+    mols = [Chem.MolFromSmiles(smi) for smi in processed_smiles]
+
     descs = []
+
+    # Descriptors:
 
     if 'RDKit' in descriptors:
         if isinstance(descriptors, dict):
@@ -93,14 +100,11 @@ def calc_desc(smi_ls,
         else:
             desc_ls = []
 
-        rdkit_desc = calc_rdkit_descs(processed_smiles, desc_ls)[0]
-        # Set index to original smiles:
-        rdkit_desc.index = smi_ls
+        rdkit_desc = calc_rdkit_descs(mols, id_ls=smi_ls, desc_ls=desc_ls)[0]
         rdkit_desc.columns = ['RDKit_'+col for col in rdkit_desc.columns]
         descs.append(rdkit_desc)
-        #print(calc_rdkit_descs(processed_smiles, desc_ls)[0])
 
-    elif 'Mordred' in descriptors:
+    if 'Mordred' in descriptors:
         raise NotImplementedError('')
         #if isinstance(descriptors, dict):
         #    desc_ls = descriptors['Mordred']
@@ -109,11 +113,34 @@ def calc_desc(smi_ls,
 
         #descs.append(calc_mordred_desc(processed_smiles))
 
-    elif 'CDDD' in descriptors:
+    if 'CDDD' in descriptors:
         # See: https://github.com/jrwnter/cddd
         raise NotImplementedError('')
 
-    df_desc = pd.concat(descs)
+    # Fingerprints:
+
+    if 'RDKit' in fingerprints:
+
+        rdkit_fps = np.array([Chem.RDKFingerprint(mol).ToList() 
+                              for mol in mols])
+        rdkit_fps = pd.DataFrame(data=rdkit_fps, 
+                                 index=smi_ls, 
+                                 columns=['RDKit_fp_b'+str(i) 
+                                          for i in range(rdkit_fps.shape[1])])
+        descs.append(rdkit_fps)
+
+    if 'Morgan' in fingerprints:
+        morgan_fps = np.array([
+            AllChem.GetMorganFingerprintAsBitVect(mol, 
+                                                  **morgan_fps_opts)
+            for mol in mols])
+        morgan_fps = pd.DataFrame(data=morgan_fps, 
+                                  index=smi_ls,
+                                  columns=['Morgan_fp_b'+str(i)
+                                           for i in range(morgan_fps.shape[1])])
+        descs.append(morgan_fps)
+    
+    df_desc = pd.concat(descs, axis=1)
 
     # Check no NaN in descriptors and remove if found:
     if rm_na:
@@ -125,7 +152,10 @@ def calc_desc(smi_ls,
             print('These will be removed')
             df_desc = df_desc.drop(df_desc.columns[df_desc.isnull().any()], axis=1, inplace=True)
 
+    # Remove constant descriptors?
+
     if output_processed_smiles:
         pass
 
     return df_desc
+
