@@ -255,17 +255,31 @@ def process_smiles(smi, tauto=False, ph=None, phmodel=None, canon_smiles=False):
 
 
 # Calculate rdkit descriptors:
-def calc_rdkit_descs(smi_ls, desc_ls=[], extra_desc=[]):
+def calc_rdkit_descs(cmpd_ls, 
+                     id_ls=[], 
+                     #input_type='SMILES', 
+                     desc_ls=[], 
+                     extra_desc=[]):
     """
     Calculate RDKit descriptors from SMILES.
     """
 
-    if isinstance(smi_ls, str):
-        smi_ls = [smi_ls]
+    if isinstance(cmpd_ls, str):
+        cmpd_ls = [cmpd_ls]
 
-    # Access any rdkit errors from stderr:
-    Chem.WrapLogs()
-    sio = sys.stderr = StringIO()
+    # Set up index:
+    if len(id_ls) == 0:
+        if isinstance(cmpd_ls[0], str):
+            id_ls = cmpd_ls
+        else:
+            id_ls = range(cmpd_ls)
+
+    # Combine index and compounds:
+    cmpd_id_ls = zip(id_ls, cmpd_ls)
+
+    ## Access any rdkit errors from stderr:
+    #Chem.WrapLogs()
+    #sio = sys.stderr = StringIO()
 
     # If no descriptors given, calculate all available RKDit 
     # descriptors:
@@ -274,32 +288,41 @@ def calc_rdkit_descs(smi_ls, desc_ls=[], extra_desc=[]):
 
     # Calculate descriptors in desc_ls:
     calc = MoleculeDescriptors.MolecularDescriptorCalculator(desc_ls)
-    df_descs = pd.DataFrame(data=np.zeros((len(smi_ls), len(desc_ls)+len(extra_desc))),
-                            index=smi_ls,
+    df_descs = pd.DataFrame(data=np.zeros((len(cmpd_ls), len(desc_ls)+len(extra_desc))),
+                            index=id_ls,
                             columns=desc_ls+extra_desc)
     df_descs.loc[:,:] = np.nan
 
-    for smi in smi_ls:
-        mol = Chem.MolFromSmiles(smi)
-        # Check SMILES has been read by rdkit:
-        if mol is None:
-            raise ValueError('Cannot read SMILES: {} using RDKit.'.format(smi))
+    for cmpd_i, cmpd in cmpd_id_ls:
 
-        df_descs.loc[smi, desc_ls] = np.array(calc.CalcDescriptors(mol))
+        # If string, assume this is a SMILES:
+        if isinstance(cmpd, str):
+            mol = Chem.MolFromSmiles(smi)
+            # Check SMILES has been read by rdkit:
+            if mol is None:
+                raise ValueError('Cannot read SMILES: {} using RDKit.'.format(smi))
+
+        # Otherwise assume this is an RDKit Mol object:
+        else:
+            mol = cmpd
+        if mol is None:
+            raise ValueError('Mol is None.')
+
+        df_descs.loc[cmpd_i, desc_ls] = np.array(calc.CalcDescriptors(mol))
 
         # Calculate Ipc descriptor separately to ensure average value is
         # calculated, this is not default in RDKit-2020.09.1, but otherwise 
         # leads to very large values which can cause problems:
         if 'Ipc' in desc_ls:
-            df_descs.loc[smi, 'Ipc'] = Chem.GraphDescriptors.Ipc(mol, 
-                                                                 avg=True)
+            df_descs.loc[cmpd_i, 'Ipc'] = Chem.GraphDescriptors.Ipc(mol, 
+                                                                    avg=True)
         for desc_name, desc_fn in extra_rdkit_descs:
             if desc_name in extra_desc:
-                df_descs.loc[smi, desc_name] = desc_fn(mol)
+                df_descs.loc[cmpd_i, desc_name] = desc_fn(mol)
 
-    warnings = sio.getvalue()
+    warnings = '' #sio.getvalue()
 
-    # Redirect errors back to stderr:
-    sys.stderr = sys.__stderr__
+    ## Redirect errors back to stderr:
+    #sys.stderr = sys.__stderr__
 
     return df_descs, warnings
