@@ -1,6 +1,7 @@
-from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, KFold
+from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, GroupShuffleSplit, KFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from rdkit import Chem
+from rdkit.Chem.Scaffolds.MurckoScaffold import MurckoScaffoldSmiles
 import deepchem as dc
 import pandas as pd
 import numpy as np
@@ -200,10 +201,11 @@ def get_lipo_split_ids(split_stage):
 #        yield train_set, val_set, test_set
 
 
-def train_test_split(data_ids,
+def train_test_split(data_ids=[],
                      split_method='random',
                      dataset_file=None,
                      strat_field=None,
+                     id_field=None,
                      n_splits=5,
                      split_stage=None,
                      frac_train=0.7,
@@ -266,27 +268,112 @@ def train_test_split(data_ids,
         c = df[strat_field]
 
         # Do two separate splits to get three sets:
-        splitter = StratifiedShuffleSplit(1, 
+        splitter = StratifiedShuffleSplit(n_splits=n_splits, 
                                           test_size=1-frac_train, 
                                           random_state=rand_seed
                                          )
         data_splits = splitter.split(data_ids, c)
 
-    elif split_method == 'murcko':
+#    elif split_method == 'murcko':
+#
+#        # Split based on Murko scaffolds:
+#
+#        df = pd.read_csv(dataset_file).set_index(id_field)
+#        df['scaffolds'] = \
+#            [MurckoScaffoldSmiles(mol=Chem.MolFromSmiles(smi), 
+#                                  includeChirality=False)
+#             for smi in df[strat_field]]
+#        c = df['scaffolds'].drop_duplicates()\
+#                           .to_numpy()
+#
+#        splitter = ShuffleSplit(n_splits=n_splits,
+#                                test_size=1-frac_train,
+#                                random_state=rand_seed
+#                               )
+#        #data_splits = splitter.split(data_ids, c)
+#        data_splits = splitter.split(c)
+#
+#        for train_set_idxs, test_set_idxs in data_splits:
+#            train_set_ids = df.loc[df['scaffolds'].isin(c[train_set_idxs])].index
+#            test_set_ids = df.loc[df['scaffolds'].isin(c[test_set_idxs])].index
+#            yield train_set_ids, test_set_ids
 
-        # Set up stratified split based on Murko scaffolds:
+    elif (split_method == 'murcko') or \
+         (split_method == 'murcko_k-fold'):
 
-        df = pd.read_csv(dataset_file)
+        # Set up group split based on Murko scaffolds:
+
+        df = pd.read_csv(dataset_file).set_index(id_field)
+        df = df.loc[data_ids]
         df['scaffolds'] = \
             [MurckoScaffoldSmiles(mol=Chem.MolFromSmiles(smi), 
                                   includeChirality=False)
              for smi in df[strat_field]]
+        #c = df['scaffolds'].drop_duplicates()\
+        #                   .to_numpy()
 
-        splitter = StratifiedShuffleSplit(1,
-                                          test_size=1-frac_train,
-                                          random_state=rand_seed
-                                         )
-        data_splits = splitter.split(data_ids, c)
+        if split_method == 'murcko':
+            splitter = GroupShuffleSplit(n_splits=n_splits,
+                                         test_size=1-frac_train,
+                                         random_state=rand_seed
+                                        )
+
+        elif split_method == 'murcko_k-fold':
+            splitter = GroupKFold(n_splits=n_splits,
+                                 )
+
+        #data_splits = splitter.split(data_ids, c)
+        data_splits = splitter.split(data_ids, groups=df['scaffolds'])
+
+#    elif split_method == 'murcko_rebalanced':
+#
+#        # Set up group split based on Murko scaffolds, then rebalance 
+#        # to get roughly the right train:test ratio:
+#
+#        df = pd.read_csv(dataset_file).set_index(id_field)
+#        df['scaffolds'] = \
+#            [MurckoScaffoldSmiles(mol=Chem.MolFromSmiles(smi), 
+#                                  includeChirality=False)
+#             for smi in df[strat_field]]
+#        c = df['scaffolds'].drop_duplicates()\
+#                           .to_numpy()
+#
+#        splitter = GroupShuffleSplit(n_splits=n_splits,
+#                                     test_size=1-frac_train,
+#                                     random_state=rand_seed
+#                                    )
+#        data_splits = splitter.split(data_ids, c)
+#        #data_splits = splitter.split(c)
+#
+#        for train_set_idxs, test_set_idxs in data_splits:
+#            train_set_ids = data_ids[train_set_idxs]
+#            test_set_ids = data_ids[test_set_idxs]
+#
+#            actual_frac_train = len(train_set_ids)/len(data_ids)
+#            print(actual_frac_train)
+#
+#            # Rebalance if necessary:
+#            if np.abs(frac_train - actual_frac_train) > imbalance_tolerance:
+#                df_curr_split = df['scaffold']
+#                df_curr_split.loc[train_set_ids, 'set'] = 'train'
+#                df_curr_split.loc[test_set_ids, 'set'] = 'test'
+#
+#                df_curr_split = \
+#                df_curr_split.groupby(['scaffold', 'set'])\
+#                             .agg(group_ids=('ID' : lambda i: list(i)), 
+#                                  group_size=('scaffold', 'count'))
+#
+#                imbalance_tolerance = 0.05
+#                while np.abs(frac_train - len(df_curr_split.loc[df_curr_split['set'] == 'train'])) < imbalance_tolerance:
+#                    if actual_frac_train > frac_train:
+#                        frac_train - imbalance_tolerance
+#                        df_curr_split.loc[df_curr_split['group_size'] < ]
+#                        #...
+#
+#            n_imbalance = round(frac_train*len(data_ids)) - len(train_set_idxs)
+#            if n_imbalance
+#
+#            yield train_set_ids, test_set_ids
 
     elif split_method == 'predefined_lipo':
 
@@ -317,11 +404,28 @@ def nested_CV_splits(train_val_test_split_filename,
     elif isinstance(dataset_ids, list):
         dataset_ids = np.array(dataset_ids)
 
-    # If previous train/val/test splits have been saved use these:
-    if os.path.isfile(train_val_test_split_filename):
-        print('Reading dataset splits from:', train_val_test_split_filename)
+#    # If previous train/val/test splits have been saved use these:
+#    if os.path.isfile(train_val_test_split_filename):
+#        print('Reading dataset splits from:', train_val_test_split_filename)
+#        df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1], index_col=0)
+#        #df_split_ids.set_index('ID', verify_integrity=True, inplace=True)
+
+    if run_input['train_test_split'].get('from_file') is not None:
+        train_test_split_filename = run_input['train_test_split']['from_file']
+        if not os.path.isfile(train_test_split_filename):
+            raise ValueError('')
+
+        print('Reading dataset splits from:', train_test_split_filename)
         df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1], index_col=0)
-        #df_split_ids.set_index('ID', verify_integrity=True, inplace=True)
+
+        if run_input['train_test_split'].get('from_file') == True:
+            return df_split_ids
+
+        else:
+            def get_train_test_split_iter(df):
+                for resample_n in df.columns:
+                    yield df.index[df[resample_n] != 'train'], df.index[df[resample_n] == 'train']
+            train_test_split_iter = get_train_test_split_iter(df_split_ids)
 
     else:
         print('Generating dataset splits and saving to:', train_val_test_split_filename)
@@ -340,41 +444,43 @@ def nested_CV_splits(train_val_test_split_filename,
         train_test_split_iter = train_test_split(dataset_ids,
                                                  **run_input['train_test_split'],
                                                  dataset_file=run_input['dataset']['dataset_file'],
+                                                 id_field=run_input['dataset'].get('id_field'),
                                                  rand_seed=rand_seed)
 
-        for resample_n, [train_val_ids, test_set_ids] in enumerate(train_test_split_iter):
-            resample_n = str(resample_n)
+    for resample_n, [train_val_ids, test_set_ids] in enumerate(train_test_split_iter):
+        resample_n = str(resample_n)
 
-            train_val_split_iter = train_test_split(train_val_ids,
-                                                **run_input['train_val_split'],
-                                                dataset_file=run_input['dataset']['dataset_file'],
-                                                rand_seed=rand_seed)
+        train_val_split_iter = train_test_split(train_val_ids,
+                                            **run_input['train_val_split'],
+                                            dataset_file=run_input['dataset']['dataset_file'],
+                                            id_field=run_input['dataset'].get('id_field'),
+                                            rand_seed=rand_seed)
 
-            for cv_n, [train_set_ids, val_set_ids] in enumerate(train_val_split_iter):
-                cv_n = str(cv_n)
+        for cv_n, [train_set_ids, val_set_ids] in enumerate(train_val_split_iter):
+            cv_n = str(cv_n)
 
-                check_dataset_split(train_set_ids,
-                                    val_set_ids,
-                                    test_set_ids,
-                                    n_samples=len(dataset_ids))
-
-                df_split_ids[(resample_n,
-                              cv_n)] = np.nan
-                df_split_ids[(resample_n,
-                              cv_n)].loc[train_set_ids] = 'train'
-                df_split_ids[(resample_n,
-                              cv_n)].loc[test_set_ids] = 'test'
-                df_split_ids[(resample_n,
-                              cv_n)].loc[val_set_ids] = 'val'
+            check_dataset_split(train_set_ids,
+                                val_set_ids,
+                                test_set_ids,
+                                n_samples=len(dataset_ids))
 
             df_split_ids[(resample_n,
-                          'refit')] = np.nan
+                          cv_n)] = np.nan
             df_split_ids[(resample_n,
-                          'refit')].loc[set(train_set_ids) | set(val_set_ids)] = 'train'
+                          cv_n)].loc[train_set_ids] = 'train'
             df_split_ids[(resample_n,
-                          'refit')].loc[test_set_ids] = 'test'
+                          cv_n)].loc[test_set_ids] = 'test'
+            df_split_ids[(resample_n,
+                          cv_n)].loc[val_set_ids] = 'val'
 
-        # Save split assignments to file:
-        df_split_ids.to_csv(train_val_test_split_filename)
+        df_split_ids[(resample_n,
+                      'refit')] = np.nan
+        df_split_ids[(resample_n,
+                      'refit')].loc[set(train_set_ids) | set(val_set_ids)] = 'train'
+        df_split_ids[(resample_n,
+                      'refit')].loc[test_set_ids] = 'test'
+
+    # Save split assignments to file:
+    df_split_ids.to_csv(train_val_test_split_filename)
 
     return df_split_ids
