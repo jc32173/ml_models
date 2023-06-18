@@ -156,6 +156,14 @@ class GetDataset():
 
         dataset = loader.create_dataset(dataset_file)
 
+        # If no y data given, have to modify the metadata to change the 
+        # value for 'y' and 'w' from np.nan to None as this is the value 
+        # checked by the get_shard() function (should probably change 
+        # the get_shard function in deepchem source code really):
+        if len(tasks) == 0:
+            dataset.metadata_df.loc[:, 'y'] = None
+            dataset.metadata_df.loc[:, 'w'] = None
+
         # Get number of atom features:
         def get_n_feat(data_block):
             if type(data_block) == dc.feat.mol_graphs.ConvMol:
