@@ -1,0 +1,52 @@
+{
+    "model_info" : {
+        "notes" : "Test run..."
+    },
+    "dataset" : {
+        "mode" : "regression",
+        "dataset_file" : "../../example_data/solubility_challenge_loose_set.csv",
+        "tasks" : ["Solubility"],
+        "feature_field" : "SMILES",
+        "id_field" : "ID",
+        "rdkit_desc" : false
+    },
+    "preprocessing" : {
+	"featurizer" : ["dc.feat.ConvMolFeaturizer(use_chirality=True)"],
+        "ph" : 7.4,
+        "phmodel" : "OpenEye",
+        "tauto" : true
+    },
+    "train_test_split" : {
+        "split_method" : "random",
+        "n_splits" : 2,
+        "frac_train" : 0.7,
+        "frac_test" : 0.3
+    },
+    "train_val_split" : {
+	    "split_method" : "k-fold",
+	    "n_splits" : 2
+    },
+    "training" : {
+	"n_cpus" : 4,
+        "epochs" : 6,
+	"selection_metric" : "loss",
+	"select_max_value" : false,
+        "model_fn_str" : "dc.models.GraphConvModel",
+        "hyperparam_search" : "grid",
+        "early_stopping" : true,
+        "early_stopping_patience" : 2,
+        "early_stopping_threshold" : 0.01,
+	"save_model" : false,
+	"save_predictions" : false,
+        "save_fps" : false
+    },
+    "hyperparams" : {
+        "batch_normalize" : [true],
+        "batch_size" : [5],
+        "learning_rate" : [0.01],
+        "dense_layer_size" : [2],
+        "graph_conv_layers" : [[2], [4]],
+        "dropout" : [0.0],
+        "_order" : ["batch_normalize", "batch_size", "learning_rate", "dense_layer_size", "graph_conv_layers", "dropout"]
+    }
+}
