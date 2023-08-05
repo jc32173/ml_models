@@ -5,6 +5,18 @@ from sklearn_models.build_models.feat_prep_funcs import *
 
 # SKLearn models
 
+# ====================
+# k Nearest Neighbours
+# ====================
+
+from sklearn.neighbors import KNeighborsRegressor
+
+RmCorrVar_kNN = Pipeline([('RmConstDesc', RmConstDesc()),
+                          ('RmCorrVar', RmCorrVar()),
+                          ('scaler', StandardScaler()),
+                          ('kNN', KNeighborsRegressor())])
+
+
 # ================
 # Ridge regression
 # ================
@@ -57,14 +69,18 @@ RmCorrVar_RFR = Pipeline([('RmConstDesc', RmConstDesc()),
 
 from sklearn.svm import SVR, SVC
 
-SVR = SVR()
-SVC = SVC()
+SVMR = SVR()
+SVMC = SVC()
 
 # SVM models with scaling:
-SVR = Pipeline([('RmConstDesc', RmConstDesc()), 
-                ('scaler', StandardScaler()), 
-                ('SVR', SVR)])
-SVC = Pipeline([('RmConstDesc', RmConstDesc()), 
-                ('scaler', StandardScaler()), 
-                ('SVC', SVC)])
+SVMR = Pipeline([('RmConstDesc', RmConstDesc()),
+                 ('scaler', StandardScaler()),
+                 ('SVR', SVR())])
+SVMC = Pipeline([('RmConstDesc', RmConstDesc()),
+                 ('scaler', StandardScaler()),
+                 ('SVC', SVC())])
 
+RmCorrVar_SVMR = Pipeline([('RmConstDesc', RmConstDesc()),
+                           ('RmCorrVar', RmCorrVar()),
+                           ('scaler', StandardScaler()),
+                           ('SVR', SVR())])
