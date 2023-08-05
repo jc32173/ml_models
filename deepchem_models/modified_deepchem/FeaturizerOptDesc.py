@@ -13,6 +13,27 @@ from deepchem.utils.typing import RDKitMol, RDKitAtom
 from deepchem.feat.graph_features import one_of_k_encoding, one_of_k_encoding_unk, GraphConvConstants, ConvMolFeaturizer
 
 from rdkit import Chem
+from rdkit.Chem import Descriptors
+
+from cheminfo_utils.rdkit_extra_desc import GetNumHs
+
+
+def H_stripped_e_density(mol):
+  """
+  Calculate a atomic descriptor based on the number of electrons around each heavy atom 
+  once all hydrogen protons are removed from a molecule.  This should be independent of 
+  tautomer form.
+  """
+  n_val_elec = Descriptors.NumValenceElectrons(mol)
+  # Divide e- density amoung non-H protons:
+  n_nonH_protons = GetNumHs(mol, onlyExplicit=False)
+  elec_per_proton = n_val_elec/n_nonH_protons
+  # Other option could be to assign e- density to atoms based on electonegativity.
+  # ...
+  for at in mol.GetAtoms():
+    #e_dens = at.GetAtomicNum()*elec_per_proton
+    e_dens = (at.GetAtomicNum()/n_nonH_protons)*elec_per_proton
+    mol.SetDoubleProp(key="atom %08d %s" % (at.GetIdx(), 'H-stripped_e-density'), val=e_dens)
 
 
 def atom_features(atom,
@@ -146,7 +167,8 @@ class ConvMolFeaturizer_OptDesc(ConvMolFeaturizer):
   name = ['conv_mol']
 
   def __init__(self, master_atom=False, use_chirality=False,
-               atom_properties=[], 
+               atom_properties=[#'H-stripped_e-density'
+                               ], 
                atom_features=['atom_type', 
                               'bond_degree', 
                               'implicit_valence', 
@@ -163,6 +185,11 @@ class ConvMolFeaturizer_OptDesc(ConvMolFeaturizer):
 
   def _featurize(self, mol):
     """Encodes mol as a ConvMol object."""
+
+    # Calculate any molecule dependent features:
+    if 'H-stripped_e-density' in self.atom_properties:
+        H_stripped_e_density(mol)
+
     # Get the node features
     idx_nodes = [(a.GetIdx(),
                   np.concatenate((atom_features(
