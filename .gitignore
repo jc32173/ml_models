@@ -2,3 +2,6 @@
 __pycache__/
 predictions.csv
 ext_predictions.csv
+GCNN_info_all_models.csv
+GCNN_info_refit_models.csv
+GCNN_info_av_performance.csv
