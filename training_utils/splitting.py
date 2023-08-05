@@ -54,7 +54,7 @@ def apply_lipo_split_to_dataset(dataset):
     return train_set, val_set, test_split
 
 
-def get_lipo_split_ids(split_stage):
+def get_lipo_split_ids(dataset_ids=None):
     """
     Split the MoleculeNet logD dataset into the same train/validation/test
     sets as used in the MoleculeNet benchmark.  Used to compare the performance 
@@ -67,12 +67,21 @@ def get_lipo_split_ids(split_stage):
     test_set_ids = test_set.ids
     val_set_ids = val_set.ids
 
-    check_dataset_split(train_set_ids, val_set_ids, test_split_ids)
+    check_dataset_split(train_set_ids, val_set_ids, test_set_ids)
 
-    if split_stage == 'train_test_split':
-        yield np.concatenate([train_set_ids, val_set_ids]), test_set_ids
+    # If dataset_ids not given return all split sets:
+    if dataset_ids is None:
+        return train_set_ids, val_set_ids, test_set_ids
+    # Outer split (train + val / test):
+    elif len(dataset_ids) == len(train_set_ids) + len(val_set_ids) + len(test_set_ids):
+        return np.concatenate([train_set_ids, val_set_ids]), test_set_ids
+    # Inner split (train / val):
+    elif len(dataset_ids) == len(train_set_ids) + len(val_set_ids):
+        return train_set_ids, val_set_ids
     else:
-        yield train_set_ids, val_set_ids
+        raise ValueError('Cannot determine lipo split, trying to split {} data points into'+\
+                         '{} (train), {} (val) and {} (test) sets'.format(
+                         len(dataset_ids), len(train_set_ids), len(val_set_ids), len(test_set_ids)))
 
 
 #def train_val_test_split(dataset,
@@ -207,7 +216,7 @@ def train_test_split(data_ids=[],
                      strat_field=None,
                      id_field=None,
                      n_splits=5,
-                     split_stage=None,
+                     #split_stage=None,
                      frac_train=0.7,
                      frac_test=0.3,
                      rand_seed=None):
@@ -375,23 +384,32 @@ def train_test_split(data_ids=[],
 #
 #            yield train_set_ids, test_set_ids
 
-    elif split_method == 'predefined_lipo':
+    # predefined_lipo split has its own yield so make this a separate if statement:
+    if split_method == 'predefined_lipo':
 
         # Split using predefined split used in MoleculeNet benchmark:
 
-        train_set_ids, test_set_ids = get_lipo_split_ids(split_stage)
+        train_set_ids, test_set_ids = get_lipo_split_ids(data_ids)
+        # DeepChem gives IDs as SMILES, so convert this to ChEMBL ID:
+        if id_field == 'CMPD_CHEMBLID':
+            df = pd.read_csv(dataset_file).set_index('smiles') #, verify_integrity=True)
+            train_set_ids = df.loc[train_set_ids, 'CMPD_CHEMBLID'].to_numpy()
+            test_set_ids = df.loc[test_set_ids, 'CMPD_CHEMBLID'].to_numpy()
         yield train_set_ids, test_set_ids
 
-    # Return the IDs from each split:
-    for train_set_idxs, test_set_idxs in data_splits:
-        train_set_ids = data_ids[train_set_idxs]
-        test_set_ids = data_ids[test_set_idxs]
-        yield train_set_ids, test_set_ids
+    # yield for all other split methods:
+    else:
+        # Return the IDs from each split:
+        for train_set_idxs, test_set_idxs in data_splits:
+            train_set_ids = data_ids[train_set_idxs]
+            test_set_ids = data_ids[test_set_idxs]
+            yield train_set_ids, test_set_ids
 
 
 def nested_CV_splits(train_val_test_split_filename,
                      dataset_ids,
                      run_input,
+                     run_restart=False,
                      rand_seed=None):
     """
     Produce train/validation/test splits for nested CV.
@@ -410,15 +428,21 @@ def nested_CV_splits(train_val_test_split_filename,
 #        df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1], index_col=0)
 #        #df_split_ids.set_index('ID', verify_integrity=True, inplace=True)
 
-    if run_input['train_test_split'].get('from_file') is not None:
+    if run_restart:
+        if not os.path.isfile(train_val_test_split_filename):
+            raise ValueError('')
+        df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1], index_col=0)
+        return df_split_ids
+
+    elif run_input['train_test_split'].get('from_file') is not None:
         train_test_split_filename = run_input['train_test_split']['from_file']
         if not os.path.isfile(train_test_split_filename):
-            raise ValueError('')
+            raise ValueError('train_val_test_split.csv file not found.')
 
         print('Reading dataset splits from:', train_test_split_filename)
-        df_split_ids = pd.read_csv(train_val_test_split_filename, header=[0, 1], index_col=0)
+        df_split_ids = pd.read_csv(train_test_split_filename, header=[0, 1], index_col=0)
 
-        if run_input['train_test_split'].get('from_file') == True:
+        if run_input['train_val_split'].get('from_file') == True:
             return df_split_ids
 
         else:
@@ -451,10 +475,10 @@ def nested_CV_splits(train_val_test_split_filename,
         resample_n = str(resample_n)
 
         train_val_split_iter = train_test_split(train_val_ids,
-                                            **run_input['train_val_split'],
-                                            dataset_file=run_input['dataset']['dataset_file'],
-                                            id_field=run_input['dataset'].get('id_field'),
-                                            rand_seed=rand_seed)
+                                                **run_input['train_val_split'],
+                                                dataset_file=run_input['dataset']['dataset_file'],
+                                                id_field=run_input['dataset'].get('id_field'),
+                                                rand_seed=rand_seed)
 
         for cv_n, [train_set_ids, val_set_ids] in enumerate(train_val_split_iter):
             cv_n = str(cv_n)

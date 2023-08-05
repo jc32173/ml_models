@@ -31,6 +31,8 @@
     "training" : {
 	"n_cpus" : 1,
         "epochs" : 5,
+	"selection_metric" : "loss",
+	"select_max_value" : false,
         "model_fn_str" : "dc.models.GraphConvModel",
         "hyperparam_search" : "grid",
         "early_stopping" : false,

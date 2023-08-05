@@ -506,13 +506,13 @@ def reshard(dataset, reshard_size=False):
         dataset.reshard(reshard_size)
 
 
-def do_transforms(train_set,
-                  val_set=None,
-                  test_set=None,
-                  ext_test_set={}, 
-                  transformers=[],
-                  reshard_size=False,
-                  parallel=False):
+def apply_transforms(train_set,
+                     val_set=None,
+                     test_set=None,
+                     ext_test_set={}, 
+                     transformers=[],
+                     reshard_size=False,
+                     parallel=False):
     """
     Do tranformations on datasets.
     """
@@ -535,6 +535,8 @@ def do_transforms(train_set,
         reshard(test_set, reshard_size)
     for set_name in ext_test_set.keys():
         reshard(ext_test_set[set_name], reshard_size)
+
+    return train_set, val_set, test_set, ext_test_set
 
 
 def transform(train_set,
@@ -566,14 +568,15 @@ def transform(train_set,
     #                               training_info=additional_params)
     #    transformers.append(feat_transformer)
 
-    do_transforms(train_set=train_set,
-                  val_set=val_set,
-                  test_set=test_set,
-                  ext_test_set=ext_test_set,
-                  transformers=transformers,
-                  reshard_size=reshard_size,
-                  # Cannot parallelise tranformers if training separate
-                  # models is already parallelised:
-                  parallel=False)
+    train_set, val_set, test_set, ext_test_set = \
+    apply_transforms(train_set=train_set,
+                     val_set=val_set,
+                     test_set=test_set,
+                     ext_test_set=ext_test_set,
+                     transformers=transformers,
+                     reshard_size=reshard_size,
+                     # Cannot parallelise tranformers if training separate
+                     # models is already parallelised:
+                     parallel=False)
 
-    return transformers
+    return train_set, val_set, test_set, ext_test_set, transformers

@@ -30,6 +30,12 @@ logging.getLogger("tensorflow").setLevel(logging.ERROR)
 #logging.getLogger("tensorflow").setLevel(logging.DEBUG)
 
 
+#loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+#for logger in loggers:
+#    logger.setLevel(logging.DEBUG)
+#logging.getLogger("tensorflow").setLevel(logging.ERROR)
+
+
 # Set random seeds to make results fully reproducible:
 if len(sys.argv) >= 3:
     rand_seed = int(sys.argv[2])
@@ -46,13 +52,15 @@ from training_utils.record_results import setup_results_series
 from training_utils.splitting import nested_CV_splits, train_test_split, check_dataset_split
 from training_utils.model_scoring import get_average_model_performance
 from deepchem_models.build_models.dc_metrics import all_metrics
-from deepchem_models.build_models.dc_preprocess import GetDataset, do_transforms, transform
+from deepchem_models.build_models.dc_preprocess import GetDataset, apply_transforms, transform
 from deepchem_models.build_models.dc_training import get_hyperparams_grid, get_hyperparams_rand, train_score_model
 
 # Hardcode standard filenames:
 train_val_test_split_filename = 'train_val_test_split.csv'
 all_model_results_filename = 'GCNN_info_all_models.csv'
 refit_model_results_filename = 'GCNN_info_refit_models.csv'
+preds_filename = 'predictions.csv'
+ext_preds_filename = None #'ext_predictions.csv'
 
 
 # Allow some hyperparameters to have string values:
@@ -71,13 +79,17 @@ def eval_str(param):
 def setup_run_training(run_input,
                        additional_params,
                        full_dataset,
+                       ext_test_set={},
                        resample_n=0,
                        cv_n=None,
                        mod_i=0,
                        split_idxs={},
                        hp_dict={},
                        run_results={},
-                       out_file=''):
+                       run_preds={},
+                       preds_file='',
+                       ext_preds_file='',
+                      ):
 
     run_results[('model_info', 'resample_number')] = resample_n
     run_results[('model_info', 'cv_fold')] = cv_n
@@ -88,14 +100,36 @@ def setup_run_training(run_input,
     # Save models and predictions:
     save_stage = ['all']
     if cv_n == 'refit':
-        save_stage.append('resample')
+        save_stage.append('refit')
     save_options = {}
     for opt in ['save_model', 'save_predictions']:
-        if run_input['training'].get(opt) in save_stage:
+        # Make "refit" the default option if not specified:
+        if run_input['training'].get(opt) is None:
+            run_input['training'][opt] = 'refit'
+        elif run_input['training'][opt] in save_stage:
             save_options[opt] = True
+        else:
+            save_options[opt] = False
 
     if save_options.get('save_model'):
         additional_params['model_dir'] = 'resample_{}_cv_{}_model_{}'.format(resample_n, cv_n, mod_i)
+    if save_options.get('save_predictions'):
+        if not os.path.isfile(preds_file):
+            df_preds = pd.DataFrame(data=[],
+                                    columns=['resample', 'cv_fold', 'model_number', 'data_split'] + \
+                                            full_dataset.ids.tolist(),
+                                    index=[])\
+                         .to_csv(preds_file, index=False)
+        if ('ext_datasets' in run_input) and \
+           (len(run_input['ext_datasets']) > 0) and \
+           not os.path.isfile(ext_preds_file):
+            mol_idxs = [(set_name, molid) for set_name in run_input['ext_datasets']['_order'] 
+                                          for molid in ext_test_set[set_name].ids]
+            df_ext_preds = pd.DataFrame(data=[],
+                                        columns=pd.MultiIndex.from_tuples(
+                list(zip(*[['resample', 'cv_fold', 'model_number', 'data_split']]*2)) + mol_idxs),
+                                        index=[])\
+                             .to_csv(ext_preds_file, index=False)
 
     # Save dataset copy and reshard:
     train_set = full_dataset.select(split_idxs['train'].to_list())
@@ -124,8 +158,9 @@ def setup_run_training(run_input,
                       ext_test_set=ext_test_set,
                       run_results=run_results,
                       **save_options,
-                      rand_seed=rand_seed, 
-                      out_file=out_file)
+                      rand_seed=rand_seed,
+                      preds_file=preds_filename,
+                      ext_preds_file=ext_preds_filename)
 
     return run_results
 
@@ -156,29 +191,21 @@ run_results[('training_info', 'deepchem_version')] = dc.__version__
 # ==============================================
 
 # File to save model details for each set of hyperparameters:
+info_out = all_model_results_filename
 if not os.path.isfile(all_model_results_filename):
+    run_restart = False
     df_prev_runs = None
-    info_out = open(all_model_results_filename, 'w')
-    info_out.write(';'.join(run_results.index.get_level_values(0))+'\n')
-    info_out.write(';'.join(run_results.index.get_level_values(1))+'\n')
-    # Need to flush here to ensure header is only written once and removed 
-    # from buffer, otherwise header is written before the results from each model:
-    info_out.flush()
-    #mod_i = 0
+    info_out_header = True
 
 # Read data from any previous runs:
 else:
+    run_restart = True
     df_prev = pd.read_csv(all_model_results_filename, sep=';', header=[0, 1])
     df_prev_runs = df_prev[[('model_info', 'resample_number'), 
                             ('model_info', 'cv_fold')] + \
                            [('hyperparams', hp_name) 
                             for hp_name in df_prev['hyperparams'].columns]]
-    if len(set(df_prev.columns) & set(run_results.index)) != len(df_prev.columns):
-        raise ValueError('')
-    #mod_i = df_prev[('model_info', 'model_number')].max() + 1
-    info_out = open(all_model_results_filename, 'a')
-    # Check order of output matches existing column order:
-    run_results = run_results[df_prev.columns]
+    info_out_header = False
 
 # Keep an empty copy to revert to after each run:
 run_results_empty = run_results.copy()
@@ -192,7 +219,8 @@ print('Loading dataset: {}'.format(run_input['dataset']['dataset_file']))
 
 # Load dataset:
 load_data = GetDataset(**run_input['dataset'], 
-                       **run_input['preprocessing'])
+                       **run_input['preprocessing'], 
+                       **run_input['training'])
 full_dataset, additional_params = load_data()
 
 # Load external test sets if given:
@@ -213,6 +241,7 @@ if 'DAG' in run_input['training']['model_fn_str']:
             max_atoms = max([mol.get_num_atoms() for mol in ext_test_set[set_name].X] + [max_atoms])
     additional_params['max_atoms'] = max_atoms
     transformer = dc.trans.DAGTransformer(max_atoms=max_atoms)
+    full_dataset, _, _, ext_test_set, _ = \
     do_transforms(train_set=full_dataset,
                   ext_test_set=ext_test_set,
                   transformers=[transformer],
@@ -226,6 +255,7 @@ if 'DAG' in run_input['training']['model_fn_str']:
 df_split_ids = nested_CV_splits(train_val_test_split_filename,
                                 full_dataset.ids,
                                 run_input,
+                                run_restart=run_restart,
                                 rand_seed=rand_seed)
 
 
@@ -255,12 +285,26 @@ elif run_input['training']['hyperparam_search'] == 'gp':
 
 n_cpus = run_input['training'].get('n_cpus')
 
+# Get number of available CPUs from slurm if run via slurm:
+available_n_cpus = os.environ.get('SLURM_NTASKS')
+
+# Check using the correct number of CPUs:
+if available_n_cpus is not None:
+    available_n_cpus = int(available_n_cpus)
+    if (n_cpus is None) or ((n_cpus is not None) and (available_n_cpus != n_cpus)):
+        if (n_cpus is not None) and (available_n_cpus != n_cpus):
+            print('WARNING: {} CPUs requested, but {} available, will use {} CPUs available'.format(
+                  n_cpus, available_cpus, available_cpus))
+        n_cpus = available_n_cpus
+        run_input['training']['n_cpus'] = available_n_cpus
+
 # Add maxtasksperchild=1 to ensure that processes are only used once and so 
 # memory is cleared after each model.  This is important for DeepChem 
 # GraphConvModel models as they are not cleared from memory after training 
 # (see: https://github.com/deepchem/deepchem/issues/1133), but this is 
 # probably not required for other models.
 pool = mp.Pool(n_cpus, maxtasksperchild=1)
+pool_refit = mp.Pool(1, maxtasksperchild=1)
 print('Training separate models on {} CPUs'.format(pool._processes))
 
 model_results = []
@@ -301,7 +345,9 @@ for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
                                         mod_i=mod_i,
                                         split_idxs=split_idxs,
                                         hp_dict=hp_dict,
-                                        run_results=run_results_empty.copy()))))
+                                        run_results=run_results_empty.copy(),
+                                        preds_file=preds_filename,
+                                        ext_preds_file=ext_preds_filename))))
 
 
 # ==================
@@ -310,34 +356,51 @@ for resample_n, cv_n in df_split_ids.drop(columns=['idx']).columns:
 
 # Fit best model for each resample:
 df_cv_results = pd.DataFrame(columns=run_results.index)
+df_final_results = pd.DataFrame(columns=run_results.index)
 refit_models = []
+refit_out_header = True
 for model_result in model_results:
     df_model_result = model_result.get()
     resample_n, cv_n, mod_i = df_model_result['model_info'][['resample_number', 'cv_fold', 'model_number']]
     print('Finished training resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
     #df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
     if info_out:
-        info_out.write(';'.join([str(i) for i in df_model_result.to_list()])+'\n')
-        info_out.flush()
+#        info_out.write(';'.join([str(i) for i in df_model_result.to_list()])+'\n')
+#        info_out.flush()
+        df_model_result.to_frame().T.to_csv(info_out, header=info_out_header, mode='a', index=False, sep=';')
+        if info_out_header:
+            info_out_header = False
 
     df_cv_results = df_cv_results.append(df_model_result, ignore_index=True)
 
+    n_cv_splits = df_split_ids.loc[:,resample_n]\
+                              .drop(columns='refit', errors='ignore')\
+                              .shape[1]
     if df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n, 
                          [('model_info', 'cv_fold')]]\
                     .nunique()\
-                    .squeeze() == run_input['train_val_split']['n_splits'] \
+                    .squeeze() == n_cv_splits \
        and \
        np.all(df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n]\
                            .groupby(('model_info', 'cv_fold'))\
                            .count()[('model_info', 'model_number')] == n_hyperparams):
+
+        selection_metric = run_input['training'].get('selection_metric')
+        if selection_metric is None:
+            selection_metric = 'loss'
+        select_max_value = bool(run_input['training'].get('select_max_value'))
+
         hp_cols = [('hyperparams', hp_name) for hp_name in df_cv_results['hyperparams'].columns]
-        best_hp_idx = df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n]\
-                                   .astype({hp_col : str for hp_col in hp_cols})\
-                                   .groupby([('hyperparams', hp_name) for hp_name in df_cv_results['hyperparams'].columns])\
-                                   .mean()\
-                                   .sort_values(('val', 'loss'))\
-                                   .iloc[[0]]\
-                                   .index
+        best_mod_i_hp_idx = df_cv_results.loc[df_cv_results[('model_info', 'resample_number')] == resample_n]\
+                                         .astype({hp_col : str for hp_col in hp_cols})\
+                                         .groupby([('model_info', 'model_number')] + [('hyperparams', hp_name) for hp_name in df_cv_results['hyperparams'].columns])\
+                                         .mean()\
+                                         .sort_values(('val', selection_metric), ascending=not select_max_value)\
+                                         .iloc[[0]]\
+                                         .index
+
+        best_mod_i = int(best_mod_i_hp_idx.get_level_values(('model_info', 'model_number')).values) #.squeeze()
+        best_hp_idx = best_mod_i_hp_idx.droplevel([('model_info', 'model_number')])
 
         best_hp_dict = pd.Series(data=best_hp_idx.values.squeeze(),
                                  index=pd.MultiIndex.from_tuples(best_hp_idx.names))\
@@ -347,39 +410,39 @@ for model_result in model_results:
 
         # Average number of epochs if using early stopping:
         if run_input['training'].get('early_stopping') == True:
-            #print(df_cv_results['training_info']['epochs'])
             run_input['training']['epochs'] = int(round(df_cv_results['training_info']['epochs'].mean(), 0))
             run_input['training']['early_stopping'] = False
 
         cv_n = 'refit'
 
         split_idxs = df_split_ids.set_index((resample_n, cv_n))['idx']
-        print('Submitting resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
-        
-        refit_models.append(
-            pool.apply_async(setup_run_training,
+        print('Submitting resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, best_mod_i))
+
+        # Probably doesn't need to be run as part of the pool, can be run immediately from the parent process, 
+        # but launch within a new process in case of memory leaks:
+        p = pool_refit.apply_async(setup_run_training,
                              kwds=(dict(run_input=run_input,
                                         additional_params=additional_params.copy(),
                                         full_dataset=full_dataset,
                                         resample_n=resample_n,
                                         cv_n=cv_n,
-                                        mod_i=mod_i,
+                                        mod_i=best_mod_i,
                                         split_idxs=split_idxs,
                                         hp_dict=best_hp_dict,
                                         run_results=run_results_empty.copy(),
-                                        out_file=''))))
+                                        preds_file=preds_filename,
+                                        ext_preds_file=ext_preds_filename)))
 
-#df_model_result.to_csv(all_model_results_filename, index=False, mode='a', header=False)
+        df_model_result = p.get()
+        df_model_result.to_frame().T.to_csv('GCNN_info_refit_models.csv', header=refit_out_header, mode='a', index=False, sep=';')
+        refit_out_header = False
+        resample_n, cv_n, mod_i = df_model_result['model_info'][['resample_number', 'cv_fold', 'model_number']]
+        print('Finished training resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
+        df_final_results = df_final_results.append(df_model_result, ignore_index=True)
 
-df_final_results = pd.DataFrame(columns=run_results.index)
-for model_result in refit_models:
-    df_model_result = model_result.get()
-    resample_n, cv_n, mod_i = df_model_result['model_info'][['resample_number', 'cv_fold', 'model_number']]
-    print('Finished training resample: {}, cv fold: {}, hyperparameter combination: {}'.format(resample_n, cv_n, mod_i))
-    df_final_results = df_final_results.append(df_model_result, ignore_index=True)
 pool.close()
 
-df_final_results.to_csv('GCNN_info_refit_models.csv', index=False)
+pool_refit.close()
 
 
 # =======================

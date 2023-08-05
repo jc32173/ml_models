@@ -11,7 +11,7 @@
         "rdkit_desc" : false
     },
     "preprocessing" : {
-	"featurizer" : ["dc.feat.ConvMolFeaturizer(use_chirality=True)"],
+	"featurizer" : ["ConvMolFeaturizer_OptDesc(use_chirality=True, atom_features=['atom_type', 'chirality'])"],
         "ph" : 7.4,
         "phmodel" : "OpenEye",
         "tauto" : true
