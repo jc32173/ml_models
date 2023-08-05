@@ -2,11 +2,10 @@ from rdkit import Chem
 import numpy as np
 import pandas as pd
 import sys
-sys.path.insert(0, '/users/xpb20111/programs/cheminfo_utils')
-from smi_funcs import process_smiles, calc_rdkit_descs
 from deepchem.feat import Featurizer
 import logging
 
+from predictive_models.smi_funcs import process_smiles, calc_rdkit_descs
 
 # Set up logger for module:
 logger = logging.getLogger(__name__)
