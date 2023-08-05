@@ -5,7 +5,7 @@ import sys
 from deepchem.feat import Featurizer
 import logging
 
-from predictive_models.smi_funcs import process_smiles, calc_rdkit_descs
+from cheminfo_utils.smi_funcs import process_smiles, calc_rdkit_descs
 
 # Set up logger for module:
 logger = logging.getLogger(__name__)
