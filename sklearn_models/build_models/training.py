@@ -11,18 +11,20 @@ def score_model(model,
                 mode='regression',
                 n_classes=None,
                 run_results={},
+                run_preds=None,
                 **kwargs):
 
-    # Save stats on dataset splits:
+    # Get predictions and save stats on dataset splits:
+    df_preds = pd.DataFrame()
     for split_name, dataset in {'train' : train_set,
                                 'val' : val_set,
                                 'test' : test_set,
                                 **ext_test_set}.items():
 
         if dataset is not None:
-            y_pred = pd.Series(model.predict(dataset.X),
-                              index=dataset.ids.squeeze(),
-                              name='y_pred')
+            y_pred = pd.Series(model.predict(dataset.X).squeeze(),
+                               index=dataset.ids.squeeze(),
+                               name=split_name)
             y_true = dataset.y.squeeze()
 
             #for metric_name, metric_fn in all_metrics.items():
@@ -32,3 +34,8 @@ def score_model(model,
 
             if mode == 'regression':
                 run_results[(split_name, 'y_stddev')] = dataset.y.std()
+
+            if run_preds is not None:
+                run_preds[split_name] = y_pred
+#            df_preds = df_preds.append(y_pred)
+#    print(df_preds)
