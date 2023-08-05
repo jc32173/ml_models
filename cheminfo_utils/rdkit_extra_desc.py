@@ -42,6 +42,13 @@ def GetTotalNumElectrons(mol):
     return n_elec
 
 
+def GetNumHs(mol, onlyExplicit=False):
+    """
+    Get number of hydrogens in a molecule
+    """
+    return mol.GetNumAtoms(onlyExplicit=onlyExplicit) - mol.GetNumHeavyAtoms()
+
+
 # Originally written for 202211_Analyse_40M_pymolgen_compounds_ONGOING:
 def GetFusedRings(mol):
     """
@@ -127,6 +134,7 @@ def GetFusedRings(mol):
 extra_rdkit_descs = [('max_ring_size', max_ring_size), 
                      ('TotalNumProtons', GetTotalNumProtons), 
                      ('TotalNumElectrons', GetTotalNumElectrons), 
+                     ('NumHs', GetNumHs), 
                      ('SAscore', sascorer.calculateScore), 
                      ('num_groups_fused_rings', lambda m: len(GetFusedRings(m))), 
                      ('max_fused_rings', lambda m: len(GetFusedRings(m)[0]))]
