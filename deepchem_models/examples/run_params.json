@@ -11,7 +11,7 @@
         "rdkit_desc" : false
     },
     "preprocessing" : {
-	"featurizer" : ["ConvMolFeaturizer_OptDesc(use_chirality=True, atom_features=['atom_type', 'chirality'])"],
+	"featurizer" : ["ConvMolFeaturizer_OptDesc(use_chirality=True)"],
         "ph" : 7.4,
         "phmodel" : "OpenEye",
         "tauto" : true
@@ -27,14 +27,15 @@
 	"n_splits" : 2
     },
     "training" : {
-	"n_cpus" : 1,
-        "epochs" : 50,
+	"n_cpus" : 4,
+        "epochs" : 10,
         "model_fn_str" : "dc.models.GraphConvModel",
         "hyperparam_search" : "grid",
         "early_stopping" : false,
-	"save_model" : "resample",
-	"save_predictions" : false,
-        "save_fps" : false
+	"save_model" : "refit",
+	"save_predictions" : "refit",
+        "save_fps" : false,
+	"calculate_ensemble_performance" : true
     },
     "hyperparams" : {
         "batch_normalize" : [true],
