@@ -22,8 +22,11 @@ logging.getLogger().setLevel(logging.ERROR)
 
 from deepchem_models.build_models.dc_metrics import all_metrics, calc_stddev
 from deepchem_models.build_models.dc_preprocess import transform
+from deepchem_models.modified_deepchem.\
+    wrap_KerasModel_for_uncertainty import wrap_KerasModel_for_uncertainty
 #from modified_deepchem.GraphConvClassifier import GraphConvClassifier
-from deepchem_models.modified_deepchem.GraphConvModel_OptPooling import GraphConvModel_OptPooling
+from deepchem_models.modified_deepchem.GraphConvModel_OptPooling import \
+    GraphConvModel_OptPooling
 
 
 def get_hyperparams_grid(hyperparams):
@@ -350,6 +353,7 @@ def train_model(train_set,
                 test_set=None,
                 ext_test_set={},
                 model_fn_str='dc.models.GraphConvModel',
+                uncertainty=False,
                 hyperparams={},
                 additional_params={},
                 epochs=100,
@@ -371,8 +375,13 @@ def train_model(train_set,
         del hyperparams['learning_rate']
 
     # Initialise model:
-    model = eval(model_fn_str)(**additional_params,
-                               **hyperparams)
+    if uncertainty:
+        model = wrap_KerasModel_for_uncertainty(eval(model_fn_str))(
+                    **additional_params,
+                    **hyperparams)
+    else:
+        model = eval(model_fn_str)(**additional_params,
+                                   **hyperparams)
 
     # Add model specific loss function to metrics:
     if additional_params.get('uncertainty'):
@@ -543,10 +552,12 @@ def save_predictions_to_file(model,
                              resample_number=None,
                              cv_fold=None,
                              model_number=None,
+                             tasks=[],
                              train_set=None,
                              val_set=None,
                              test_set=None,
                              ext_test_set={},
+                             uncertainty=False,
                              transformers=[],
                              preds_file=None,
                              ext_preds_file=None,
@@ -560,17 +571,25 @@ def save_predictions_to_file(model,
 
     # Save stats on dataset splits:
     if (preds_file is not None) and os.path.isfile(preds_file):
-        df_preds = pd.read_csv(preds_file, nrows=0, index_col=[0, 1, 2, 3]) #.T
+        df_preds = pd.read_csv(preds_file, nrows=0, index_col=[0, 1, 2, 3, 4]) #.T
     else:
         raise ValueError('No predictions file found')
-    for split_name, dataset in {'train' : train_set, 
+    for split_name, dataset in {'train' : train_set,
                                 'val' : val_set,
                                 'test' : test_set}.items():
         if dataset:
             # May have to add another loop for multitask models and uncertainty:
-            df_preds.loc[tuple(full_idx + [split_name])] = np.nan
-            df_preds.loc[tuple(full_idx + [split_name]), dataset.ids] = \
+            df_preds.loc[tuple(full_idx + [split_name, tasks[0]])] = np.nan
+            df_preds.loc[tuple(full_idx + [split_name, tasks[0]]),
+                         dataset.ids] = \
                 model.predict(dataset, transformers=transformers).squeeze()
+
+            if uncertainty:
+                df_preds.loc[tuple(full_idx + [split_name, 'uncertainty'])] = np.nan
+                df_preds.loc[tuple(full_idx + [split_name, 'uncertainty']), dataset.ids] = \
+                    model.predict_uncertainty(dataset,
+                                              #transformers=transformers
+                                             )[1].squeeze()
 
     df_preds.to_csv(preds_file, mode='a', header=False)
 
@@ -658,10 +677,12 @@ def train_score_model(train_set,
     if save_predictions:
         save_predictions_to_file(model,
                                  **run_results['model_info'],
+                                 tasks=run_results['dataset']['tasks'],
                                  train_set=train_set,
                                  val_set=val_set,
                                  test_set=test_set,
                                  ext_test_set=ext_test_set,
+                                 uncertainty=run_results['training'].get('uncertainty'),
                                  transformers=transformers,
                                  preds_file=preds_file,
                                  ext_preds_file=ext_preds_file,

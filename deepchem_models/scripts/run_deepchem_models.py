@@ -55,6 +55,9 @@ from deepchem_models.build_models.dc_metrics import all_metrics
 from deepchem_models.build_models.dc_preprocess import GetDataset, apply_transforms, transform
 from deepchem_models.build_models.dc_training import get_hyperparams_grid, get_hyperparams_rand, train_score_model
 
+
+preds_file_index_cols = ['resample', 'cv_fold', 'model_number', 'data_split', 'task']
+
 # Hardcode standard filenames:
 train_val_test_split_filename = 'train_val_test_split.csv'
 all_model_results_filename = 'GCNN_info_all_models.csv'
@@ -116,7 +119,7 @@ def setup_run_training(run_input,
     if save_options.get('save_predictions'):
         if not os.path.isfile(preds_file):
             df_preds = pd.DataFrame(data=[],
-                                    columns=['resample', 'cv_fold', 'model_number', 'data_split'] + \
+                                    columns=preds_file_index_cols + \
                                             full_dataset.ids.tolist(),
                                     index=[])\
                          .to_csv(preds_file, index=False)
@@ -127,7 +130,7 @@ def setup_run_training(run_input,
                                           for molid in ext_test_set[set_name].ids]
             df_ext_preds = pd.DataFrame(data=[],
                                         columns=pd.MultiIndex.from_tuples(
-                list(zip(*[['resample', 'cv_fold', 'model_number', 'data_split']]*2)) + mol_idxs),
+                list(zip(*[preds_file_index_cols]*2)) + mol_idxs),
                                         index=[])\
                              .to_csv(ext_preds_file, index=False)
 
@@ -443,6 +446,53 @@ for model_result in model_results:
 pool.close()
 
 pool_refit.close()
+
+
+# =================================
+# Get performance of ensemble model
+# =================================
+
+# Average refit predictions and then calculate performance:
+if run_input["training"].get("calculate_ensemble_performance") and \
+   run_input["training"].get("save_predictions") in ["refit", "all"]:
+    print('Calculating performance of "ensemble" of refit models')
+    df_preds = pd.read_csv(preds_filename, index_col=list(range(len(preds_file_index_cols))))
+
+    df_av_preds = df_preds.loc[(df_preds.index.get_level_values('cv_fold') == 'refit') & \
+                               (df_preds.index.get_level_values('data_split') == 'test')]\
+                          .reset_index(level='task')\
+                          .groupby('task')\
+                          .mean()
+
+    df_av_preds.index = pd.MultiIndex.from_tuples([(-1, 'av_over_refits', -1, 'test',
+                                                    task) for task in df_av_preds.index])
+
+    # Save average predictions to file:
+    df_av_preds.to_csv(preds_filename, mode='a', header=False)
+
+    run_results = run_results_empty.copy()
+
+    df_av_preds.dropna(axis=1, inplace=True)
+
+    train_vals = pd.read_csv(run_input["dataset"]["dataset_file"])\
+                   .set_index(run_input["dataset"]["id_field"])\
+                   .loc[df_av_preds.columns, run_input["dataset"]["tasks"][0]]\
+                   .to_numpy()
+
+    for metric_name in all_metrics['_order']:
+        metric = all_metrics[metric_name]
+        run_results[('test', metric.name)] = round(
+                                metric.compute_metric(train_vals,
+                                                      df_av_preds.loc[(-1, 'av_over_refits', -1, 'test', run_input["dataset"]["tasks"][0])].to_numpy(),
+                                                     ), 3)
+
+    # Save stats to file:
+    # Maintain header order:
+    df_ens_model_result = pd.read_csv('GCNN_info_refit_models.csv', sep=';', header=[0, 1], nrows=0)
+    df_ens_model_result = df_ens_model_result.append(run_results.to_frame()\
+                                                                .T)\
+                                             [df_ens_model_result.columns]
+    df_ens_model_result.to_csv('GCNN_info_refit_models.csv', header=False, mode='a', index=False, sep=';')
 
 
 # =======================

@@ -11,31 +11,34 @@
         "rdkit_desc" : false
     },
     "preprocessing" : {
-	"featurizer" : ["ConvMolFeaturizer_OptDesc(use_chirality=True)"],
+        "featurizer" : ["ConvMolFeaturizer_OptDesc(use_chirality=True)"],
         "ph" : 7.4,
         "phmodel" : "OpenEye",
         "tauto" : true
     },
     "train_test_split" : {
-	"split_method" : "random",
-	"n_splits" : 2,
+        "split_method" : "random",
+        "n_splits" : 2,
         "frac_train" : 0.7,
         "frac_test" : 0.3
     },
     "train_val_split" : {
         "split_method" : "k-fold",
-	"n_splits" : 2
+        "n_splits" : 2
     },
     "training" : {
-	"n_cpus" : 4,
+        "n_cpus" : 4,
         "epochs" : 10,
         "model_fn_str" : "dc.models.GraphConvModel",
+        "selection_metric" : "loss",
+        "select_max_value" : false,
+        "uncertainty" : true,
         "hyperparam_search" : "grid",
         "early_stopping" : false,
-	"save_model" : "refit",
-	"save_predictions" : "refit",
+        "save_model" : "refit",
+        "save_predictions" : "refit",
         "save_fps" : false,
-	"calculate_ensemble_performance" : true
+        "calculate_ensemble_performance" : true
     },
     "hyperparams" : {
         "batch_normalize" : [true],
@@ -43,7 +46,7 @@
         "learning_rate" : [0.01],
         "dense_layer_size" : [2],
         "graph_conv_layers" : [[2], [4]],
-        "dropout" : [0.0],
+        "dropout" : [0.05],
         "_order" : ["batch_normalize", "batch_size", "learning_rate", "dense_layer_size", "graph_conv_layers", "dropout"]
     }
 }
