@@ -4,4 +4,6 @@ predictions.csv
 ext_predictions.csv
 GCNN_info_all_models.csv
 GCNN_info_refit_models.csv
-GCNN_info_av_performance.csv
+*_info_av_performance.csv
+resample_*_cv_*_model_*/
+train_val_test_split.csv
