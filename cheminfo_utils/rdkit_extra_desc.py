@@ -50,20 +50,27 @@ def GetNumHs(mol, onlyExplicit=False):
 
 
 # Originally written for 202211_Analyse_40M_pymolgen_compounds_ONGOING:
-def GetFusedRings(mol):
+def GetFusedRings(cmpd):
     """
     Get the groups of fused rings in a molecule,
     ordered by size.
 
     Examples for testing the code:
-    'Cc1noc(C)c1-c1cnc2[nH]c(=O)n(-c3c(C(N)=O)c4nc5ccccc5oc-4cc3=O)c2c1'
-    'Cc1noc(C)c1-c1cnc2[nH]c(=O)n(Cn3c4ccccc4c4c5c(c6c7ccccc7[nH]c6c43)C(=O)NC5)c2c1'
-    'Cc1noc(C)c1-c1cnc2[nH]c(=O)n(-c3c4c(nc5cc(F)ccc35)CC3C=CCC4C3)c2c1'
-    'Cc1noc(C)c1-c1cnc2[nH]c(=O)n(Cc3ccc4c(c3)[nH]c3c4c4c(c5c6cccc7c6n(c35)CCC7)C(=O)NC4=O)c2c1'
+    >>> GetFusedRings('Cc1noc(C)c1-c1cnc2[nH]c(=O)n(-c3c(C(N)=O)c4nc5ccccc5oc-4cc3=O)c2c1')
+    [{3, 4, 5}, {1, 2}, {0}]
+    >>> GetFusedRings('Cc1noc(C)c1-c1cnc2[nH]c(=O)n(Cn3c4ccccc4c4c5c(c6c7ccccc7[nH]c6c43)C(=O)NC5)c2c1')
+    [{3, 4, 5, 6, 7, 8}, {1, 2}, {0}]
+    >>> GetFusedRings('Cc1noc(C)c1-c1cnc2[nH]c(=O)n(-c3c4c(nc5cc(F)ccc35)CC3C=CCC4C3)c2c1')
+    [{3, 4, 5, 6}, {1, 2}, {0}]
+    >>> GetFusedRings('Cc1noc(C)c1-c1cnc2[nH]c(=O)n(Cc3ccc4c(c3)[nH]c3c4c4c(c5c6cccc7c6n(c35)CCC7)C(=O)NC4=O)c2c1')
+    [{3, 4, 5, 6, 7, 8, 9}, {1, 2}, {0}]
     """
 
+    if isinstance(cmpd, str):
+        cmpd = Chem.MolFromSmiles(cmpd)
+
     fused_rings = []
-    ring_bonds = mol.GetRingInfo().BondRings()
+    ring_bonds = cmpd.GetRingInfo().BondRings()
     n_rings = len(ring_bonds)
 
     # List of unassigned rings:
