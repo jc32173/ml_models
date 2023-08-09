@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import os
 
+
+preds_file_index_cols = ['resample', 'cv_fold', 'model_number', 'data_split', 'task']
+
+
 def setup_results_series(run_input, all_metrics):
     """
     Set up empty Series object to store results.
