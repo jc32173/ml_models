@@ -106,7 +106,7 @@ def setup_run_training(run_input,
     for opt in ['save_model', 'save_predictions']:
         # Make "refit" the default option if not specified:
         if run_input['training'].get(opt) is None:
-            run_input['training'][opt] = 'refit'
+            save_options['training'][opt] = 'refit'
         elif run_input['training'][opt] in save_stage:
             save_options[opt] = True
         else:
