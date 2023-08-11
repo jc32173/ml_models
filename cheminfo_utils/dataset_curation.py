@@ -4,31 +4,96 @@ import math
 import sys, os
 from rdkit import Chem
 import pandas as pd
+import re
 
 sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV')
 
-from cheminfo_utils.rdkit_funcs import GetMol, canonicalise_smiles, canonicalise_tautomer, inchi_check, \
-                                       GetPossibleTautomers, GetPossibleStereoisomers, GetPossibleTautomersStereoisomers, is_ionisable
-import re
+from cheminfo_utils.rdkit_funcs import \
+    GetMol, canonicalise_smiles, canonicalise_tautomer, inchi_check, \
+    GetPossibleTautomers, GetPossibleStereoisomers, \
+    GetPossibleTautomersStereoisomers, is_ionisable, GetEnantiomer
+
 
 def find_possible_duplicates(sr_smi): #, id_col):
     """
     Read list of lists of possible SMILES and identify any
     matches, due to tautomers or possible stereoisomers.
+
+    sr_smi: Series of lists: [ID, [smiles_1, smiles_2, ...]]
     """
-    
+
     dup_idxs = [[] for _ in range(len(sr_smi))] #[[]]*len(sr_smi)
     idx = 0
     #for i_1, smi_ls_1, in enumerate(ls_col):
     for i_1, [idx_1, smi_ls_1] in enumerate(sr_smi.iteritems()):
         for j, [idx_2, smi_ls_2] in enumerate(sr_smi.iloc[i_1+1:].iteritems()):
-            i_2 = i_1+1+j
-            if i_1 == i_2:
-                continue
+            i_2 = i_1 + 1 + j
+            #if i_1 == i_2:
+            #    continue
             if len(set(smi_ls_1) & set(smi_ls_2)) > 0:
                 dup_idxs[i_1].append(idx_2)
                 dup_idxs[i_2].append(idx_1)
     return dup_idxs
+
+
+def find_enantiomers(df_smi_enant): #, generate_enantiomers=False):
+    """
+    Find enantiomers within a list of SMILES.
+
+    df_smi_enant: DataFrame with SMILES and Enantiomers columns
+
+    To do: Generate enantiomers if not given as input.
+    """
+
+    enant_idxs = [None for _ in range(len(df_smi_enant))]
+    idx = 0
+    for i_1, [idx_1, [smi_1, enant_1]] in enumerate(df_smi_enant.iterrows()):
+        for j, [idx_2, [smi_2, enant_2]] in \
+            enumerate(df_smi_enant.iloc[i_1+1:].iterrows()):
+            i_2 = i_1 + 1 + j
+            if enant_1 == smi_2:
+                # Double check the reverse:
+                if smi_1 != enant_2:
+                    raise ValueError('')
+                enant_idxs[i_1] = idx_2
+                enant_idxs[i_2] = idx_1
+    return enant_idxs
+
+
+def find_stereoisomers(sr_smi):
+    """
+    Find stereoisomers within a list of SMILES (non-identical SMILES which 
+    share the same canonical 2D SMILES).
+    """
+    
+    idx_order = sr_smi.index
+    idx_name = sr_smi.index.name
+    if idx_name is None:
+        idx_name = 'index'
+
+    df_isomer_grps = sr_smi.loc[sr_smi.duplicated(keep=False)]\
+                           .reset_index(drop=False)\
+                           .groupby('2D_SMILES')\
+                           .agg(lambda x: list(x))
+
+    isomers = []
+    for idx_ls in df_isomer_grps[idx_name]:
+        for idx in idx_ls:
+            # Remove current ID from list of stereoisomers:
+            isomers.append([idx, sorted(list(set(idx_ls) - {idx}))])
+
+    df_isomers = pd.DataFrame(data=[[[]]]*len(idx_order),
+                              columns=['Stereoisomers'],
+                              index=idx_order)
+
+    df_isomers_only = \
+    pd.DataFrame(isomers, columns=[idx_name, 'Stereoisomers'])\
+      .set_index(idx_name, verify_integrity=True)
+
+    df_isomers.loc[df_isomers_only.index, 'Stereoisomers'] = \
+        df_isomers_only['Stereoisomers']
+
+    return df_isomers.loc[idx_order]
 
 # def silence_print(fn):
 #     def redirect_stdout(*args, **kwags):
@@ -44,27 +109,7 @@ def find_possible_duplicates(sr_smi): #, id_col):
 #     sys.stdout = sys.__stdout__ #old_stdout # reset old stdout
 
 
-def df_apply_funcs_in_chunks(df, chunksize=None):
-    if chunksize is None:
-        df_apply_funcs(df)
-    else:
-        for i in range(0, len(df), chunksize):
-            
-            print('Chunk: {}/{}'.format((i//chunksize)+1, 
-                                        math.ceil(len(df)/chunksize)), 
-                  end='\r')
-            idx_i = df.index[i]
-            j = i + chunksize
-            if j > len(df):
-                idx_j = None
-            else:
-                idx_j = df.index[j]
-            df_apply_funcs(df, idx_i, idx_j, verbose=False)
-        print()
-    check_for_duplicates(df, verbose=True)
-
-
-# Use apply:
+# Use pandas apply:
 #def df_apply_funcs(df, idx_i=None, idx_j=None, drop_mol=True, verbose=True):
 #    """
 #    Apply set of functions on SMILES column to get basic information about molecule.
@@ -135,20 +180,28 @@ def df_apply_funcs_in_chunks(df, chunksize=None):
 #        df.drop(columns='Mol', inplace=True)
 
 
-def df_apply_funcs(df, idx_i=None, idx_j=None, drop_mol=True, verbose=True):
+def apply_funcs(df, 
+                idx_i=None, 
+                idx_j=None, 
+                smiles_col='SMILES', 
+                drop_mol=True, 
+                verbose=True):
     """
     Apply set of functions on SMILES column to get basic information about molecule.
     """
 
-    df.loc[idx_i:idx_j, 'Mol'] = [GetMol(smi) for smi in df.loc[idx_i:idx_j, 'SMILES']]
-    
+    df.loc[idx_i:idx_j, 'Mol'] = [GetMol(smi) for smi in df.loc[idx_i:idx_j, smiles_col]]
+
     # Standard representations:
     if verbose:
         print('Generate standard representations...')
     df.loc[idx_i:idx_j, 'Canon_SMILES'] = \
         [Chem.MolToSmiles(mol, canonical=True) for mol in df.loc[idx_i:idx_j, 'Mol']]
     df.loc[idx_i:idx_j, 'Canon_tauto_SMILES'] = \
-        [canonicalise_tautomer(smi) for smi in df.loc[idx_i:idx_j, 'SMILES']]
+        [canonicalise_tautomer(smi) for smi in df.loc[idx_i:idx_j, smiles_col]]
+    df.loc[idx_i:idx_j, '2D_SMILES'] = \
+        [Chem.MolToSmiles(mol, canonical=True, isomericSmiles=False) 
+         for mol in df.loc[idx_i:idx_j, 'Mol']]
     df.loc[idx_i:idx_j, 'InChI'] = \
         [Chem.MolToInchi(mol) for mol in df.loc[idx_i:idx_j, 'Mol']]
     df.loc[idx_i:idx_j, 'InChIKey'] = \
@@ -159,10 +212,12 @@ def df_apply_funcs(df, idx_i=None, idx_j=None, drop_mol=True, verbose=True):
     # Check InChI:
     df.loc[idx_i:idx_j, 'InChI_Check'] = \
         [inchi_check(inchi) for inchi in df.loc[idx_i:idx_j, 'InChI']]
-    
-    # All possible representations:
+
+    # All possible representations and enantiomer if chiral:
     if verbose:
         print('Generate all possible representations...')
+    df.loc[idx_i:idx_j, 'Enantiomer_SMILES'] = \
+        df.loc[idx_i:idx_j].apply(lambda row: GetEnantiomer(row['Canon_SMILES']), axis=1)
     if len(df.loc[idx_i:idx_j]) == 1:
         df.loc[idx_i:idx_j, 'Possible_tauto'] = \
             df.loc[idx_i:idx_j].apply(lambda row: GetPossibleTautomers(row['Mol']), axis=1)
@@ -192,7 +247,7 @@ def df_apply_funcs(df, idx_i=None, idx_j=None, drop_mol=True, verbose=True):
     if verbose:
         print('Calculate additional information and descriptors...')
     df.loc[idx_i:idx_j, 'Disconnect'] = \
-        [len(re.findall(r"\.", smi)) for smi in df.loc[idx_i:idx_j, 'SMILES']]
+        [len(re.findall(r"\.", smi)) for smi in df.loc[idx_i:idx_j, smiles_col]]
     if len(df.loc[idx_i:idx_j]) == 1:
         df.loc[idx_i:idx_j, 'Atoms'] = \
             df.loc[idx_i:idx_j].apply(lambda row: list(set(at.GetSymbol() for at in row['Mol'].GetAtoms())), axis=1)
@@ -200,9 +255,9 @@ def df_apply_funcs(df, idx_i=None, idx_j=None, drop_mol=True, verbose=True):
         df.loc[idx_i:idx_j, 'Atoms'] = \
             [list(set(at.GetSymbol() for at in mol.GetAtoms())) for mol in df.loc[idx_i:idx_j, 'Mol']]
     df.loc[idx_i:idx_j, 'OB_Ionisable?'] = \
-        [is_ionisable(smi, method='OpenBabel') for smi in df.loc[idx_i:idx_j, 'SMILES']]
+        [is_ionisable(smi, method='OpenBabel') for smi in df.loc[idx_i:idx_j, smiles_col]]
     df.loc[idx_i:idx_j, 'OE_Ionisable?'] = \
-        [is_ionisable(smi, method='OpenEye') for smi in df.loc[idx_i:idx_j, 'SMILES']]
+        [is_ionisable(smi, method='OpenEye') for smi in df.loc[idx_i:idx_j, smiles_col]]
 #     df['Undefined_stereo'] = df.apply(lambda row: undefined_stereo(row['Mol']), axis=1)
 #     df['Unspecified_stereocentres'] = df.apply(lambda row: unspecified_stereocentres(row['Mol']), axis=1)
 
@@ -223,10 +278,60 @@ def df_apply_funcs(df, idx_i=None, idx_j=None, drop_mol=True, verbose=True):
         df.drop(columns='Mol', inplace=True)
 
 
+def run_apply_funcs(df, 
+                    chunksize=None, 
+                    smiles_col='SMILES', 
+                    verbose=False):
+    """
+    Run apply_funcs() function, optionally in chunks, to get information on a 
+    full dataset and also check for relationships between molecules (e.g. 
+    enantiomers, stereoisomers, possible tautomers).
+    """
+
+    if chunksize is None:
+        apply_funcs(df,
+                    smiles_col=smiles_col,
+                    verbose=verbose)
+    else:
+        for i in range(0, len(df), chunksize):
+            end = '\r'
+            if verbose:
+                end = '\n'
+            print('Chunk: {}/{}'.format((i//chunksize)+1,
+                                        math.ceil(len(df)/chunksize)),
+                  end=end)
+            idx_i = df.index[i]
+            j = i + chunksize
+            if j > len(df):
+                idx_j = None
+            else:
+                idx_j = df.index[j]
+            apply_funcs(df, idx_i, idx_j, 
+                        smiles_col=smiles_col, 
+                        verbose=verbose)
+        if not verbose:
+            print()
+    df['Enantiomers'] = find_enantiomers(df[['Canon_SMILES', 'Enantiomer_SMILES']])
+    df['Stereoisomers'] = find_stereoisomers(df['2D_SMILES'])
+    check_for_duplicates(df, verbose=True)
+
+
 # Identify possible duplicates:
 def check_for_duplicates(df, verbose=True):
+    """
+    Check for compounds which may be duplicates (as tautomers or due to 
+    undefined stereochemistry).
+    """
+
     if verbose:
         print('Identify possible duplicates...')
     df['Possible_tauto_duplicates'] = find_possible_duplicates(df['Possible_tauto'])
     df['Possible_stereo_duplicates'] = find_possible_duplicates(df['Possible_stereo'])
     df['Possible_tauto_stereo_duplicates'] = find_possible_duplicates(df['Possible_tauto_stereo'])
+
+
+def generate_dataset_report():
+    """
+    Generate a set of plots to summarise the dataset.
+    """
+    pass
