@@ -40,7 +40,7 @@ def find_enantiomers(df_smi_enant): #, generate_enantiomers=False):
     """
     Find enantiomers within a list of SMILES.
 
-    df_smi_enant: DataFrame with SMILES and Enantiomers columns
+    df_smi_enant: DataFrame with SMILES and Enantiomer columns
 
     To do: Generate enantiomers if not given as input.
     """
@@ -311,7 +311,7 @@ def run_apply_funcs(df,
                         verbose=verbose)
         if not verbose:
             print()
-    df['Enantiomers'] = find_enantiomers(df[['Canon_SMILES', 'Enantiomer_SMILES']])
+    df['Enantiomer'] = find_enantiomers(df[['Canon_SMILES', 'Enantiomer_SMILES']])
     df['Stereoisomers'] = find_stereoisomers(df['2D_SMILES'])
     check_for_duplicates(df, verbose=True)
 
@@ -330,8 +330,11 @@ def check_for_duplicates(df, verbose=True):
     df['Possible_tauto_stereo_duplicates'] = find_possible_duplicates(df['Possible_tauto_stereo'])
 
 
-def generate_dataset_report():
+def generate_dataset_report(df):
     """
     Generate a set of plots to summarise the dataset.
     """
-    pass
+    print('Number of datapoints: {}'.format(len(df)))
+    print('Number of unique canonical SMILES: {}'.format(len(df.drop_duplicates('Canon_SMILES'))))
+    print('Number of unique 2D canonical SMILES: {}'.format(len(df.drop_duplicates('2D_SMILES'))))
+    print('Number of enantiomer pairs: {}'.format(len(df['Enantiomer'].drop_na())//2))
