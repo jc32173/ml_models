@@ -1,0 +1,40 @@
+{
+    "model_info" : {
+        "name" : "pIC50 GCNN",
+        "prediction_value" : "pIC50",
+        "version" : "2023.7.1",
+        "info" : "GCNN ensemble pIC50 regression model",
+        "units" : null,
+        "mode" : "regression",
+        "uncertainty" : false,
+        "ensemble" : true
+    },
+    "trained_model" : {
+        "run_directory" : "/users/xpb20111/Prosperity_partnership/GCNN/pIC50/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_BD1_dataset1/no_uncertainty/",
+        "selected_models" : "/users/xpb20111/Prosperity_partnership/GCNN/pIC50/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_BD1_dataset1/no_uncertainty/GCNN_info_refit_models.csv"
+    },
+    "training_data" : {
+        "save_to_separate_file" : true,
+        "encrypt" : true,
+        "dataset_filename" : "/users/xpb20111/Prosperity_partnership/Datasets/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_pIC50_BD1_dataset1/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_pIC50_BD1_dataset1.csv",
+        "smiles_column" : "Canon_SMILES",
+        "index_column" : "ID",
+        "value_column" : "Mean",
+        "save_extra_columns" : ["Origin"]
+    },
+    "test_data" : {
+        "calculate_ensemble_predictions" : true,
+        "predictions_filename" : "/users/xpb20111/Prosperity_partnership/GCNN/pIC50/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_BD1_dataset1/no_uncertainty/predictions.csv",
+        "dataset_filename" : "/users/xpb20111/Prosperity_partnership/Datasets/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_pIC50_BD1_dataset1/GSK_It1-10_ChEMBL_Gavai2021SI_Humphreys2022_pIC50_BD1_dataset1.csv",
+        "smiles_column" : "Canon_SMILES",
+        "index_column" : "ID",
+        "value_column" : "Mean"
+    },
+    "output_options" : {
+        "trained_model_filename" : "pIC50.pk",
+        "training_data_filename" : "pIC50_data.csv",
+        "ckpt_filename_prefix" : "pIC50_ckpt_model",
+        "ckpt_file_dirname" : "model_ckpt_files",
+        "encrypt" : false
+    }
+}
