@@ -1,0 +1,3 @@
+[submodule "cheminfo_utils"]
+	path = cheminfo_utils
+	url = https://github.com/jc32173/cheminfo_utils
