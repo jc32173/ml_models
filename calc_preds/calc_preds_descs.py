@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import sys, os
 from datetime import datetime
+import pathlib
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem.MolStandardize import rdMolStandardize
@@ -15,7 +16,7 @@ from openeye import oemolprop as mp
 from openeye import oeomega
 from openeye import oequacpac
 
-sys.path.insert(0, '/users/xpb20111/programs/')
+#sys.path.insert(0, '/users/xpb20111/repos/PP/')
 from cheminfo_utils.apply_lilly_rules import apply_lilly_rules
 
 
@@ -86,9 +87,9 @@ def CalcLogP_OE(mol_str_ls, read_InChI=False):
     logp_ls = []
 
     mol = oe.OEGraphMol()
-    for mol_str in mol_str_ls:    
+    for mol_str in mol_str_ls:
         if not read_into_oemol(mol_str, mol, read_InChI=read_InChI):
-            print('ERROR: {}'.format(mol_str))
+            print('ERROR: Cannot read molecule: {} into OpenEye.'.format(mol_str))
             logp_ls.append(np.nan)
         else:
             logp_ls.append(mp.OEGetXLogP(mol, atomxlogps=None))
@@ -300,18 +301,20 @@ def calc_predictions(df_all_vals,
 
 
 def process_df(infile, 
+               sep=';', 
+               structure_col='InChI', 
                start_line=0, 
                end_line=-1, 
                index_col=False, 
                index_prefix='', 
-               compression='gzip', 
+               #compression='gzip', 
                chunksize=1000, 
-               sep=';', 
                invalid_inchi_file=None, 
                canonicalise_tauto=True, 
                enum_tauto=False, 
                enum_iso=False, 
                lilly_rules=False, 
+               lilly_rules_script='Lilly_Medchem_Rules.rb',
                drop_lilly_failures=False, 
                save_hists={'pIC50_pred' : 0.1, 
                            'MPO' : 0.1}, 
@@ -355,112 +358,136 @@ def process_df(infile,
     n_mols = 0
 
     # Read input file into dataframe in chunks:
-    with pd.read_csv(infile, 
-                     compression=compression, 
-                     chunksize=chunksize, 
-                     sep=sep, 
-                     header=None, 
-                     names=['InChI'], 
-                     skiprows=start_line, 
-                     nrows=nrows) as reader:
+    infile_ext = pathlib.Path(infile).suffixes
+    if '.inchi' in infile_ext:
+        df_iter = pd.read_csv(infile, 
+                              #compression=compression, 
+                              chunksize=chunksize, 
+                              sep=';', 
+                              header=None, 
+                              names=[structure_col], 
+                              skiprows=start_line, 
+                              nrows=nrows)
 
-        for df_i, df in enumerate(reader):
+    elif '.csv' in infile_ext:
+        df_iter = pd.read_csv(infile,
+                              chunksize=chunksize,
+                              sep=sep,
+                              header=0,
+                              usecols=[structure_col],
+                              skiprows=range(1, start_line+1),
+                              nrows=nrows)
+    else:
+        raise ValueError('Cannot recognise file extension, '+\
+            'file must be .csv or .inchi (with .gz if compressed).')
 
-            # Create an index column if one doesn't already exist:
-            if not index_col:
-                df.index = df.index + start_line
-                if index_prefix != '':
-                    df['InChI_ID'] = 'i' + df.index.astype(str)
-                    df.index = index_prefix + '-' + df['InChI_ID'].astype(str)
-                df.index.rename('ID', inplace=True)
-            else:
-                df.set_index(index_col, verify_integrity=True, inplace=True)
+    for df_i, df in enumerate(df_iter):
 
-            # Enumerate over tautomers or stereoisomers:
-            if enum_tauto or enum_iso:
-                if canonicalise_tauto:
-                    # Ensure inchi is a string here to catch any missing inchis or nan 
-                    # values, these will be picked up on next line:
-                    df['Mol'] = [Chem.MolFromInchi(str(inchi)) for inchi in df['InChI']]
+        if (df_i == 0) and (df[structure_col].iloc[0][:5] != 'InChI'):
+            raise ValueError(
+                'Currently code only reads molecule structures from InChIs.')
 
-                    # Remove any InChIs which cannot be read into RDKit:
-                    if invalid_inchi_file is not None:
-                        df.loc[df['Mol'].isna(), 'InChI']\
-                          .to_csv(invalid_inchi_file, sep=sep, mode='a', header=False)
-                    df = df.loc[df['Mol'].notna()]
+        # Create an index column if one doesn't already exist:
+        if not index_col:
+            df.index = df.index + start_line
+            if index_prefix != '':
+                df['InChI_ID'] = 'i' + df.index.astype(str)
+                df.index = index_prefix + '-' + df['InChI_ID'].astype(str)
+            df.index.rename('ID', inplace=True)
+        else:
+            df.set_index(index_col, verify_integrity=True, inplace=True)
 
-                    df['Mol'] = [canonicalise_tautomer(mol) for mol in df['Mol']]
-                    df['canon_tauto_SMILES'] = [Chem.MolToSmiles(smi) for smi in df['Mol']]
-                    tauto_iso_smiles = enumerate_tautomers_isomers(df['canon_tauto_SMILES'], 
-                                                                   enum_tauto=enum_tauto, 
-                                                                   enum_iso=enum_iso, 
-                                                                   canonicalise_smi=False, 
-                                                                   read_InChI=False)
-                else:
-                    tauto_iso_smiles = enumerate_tautomers_isomers(df['InChI'], 
-                                                                   enum_tauto=enum_tauto, 
-                                                                   enum_iso=enum_iso, 
-                                                                   canonicalise_smi=False, 
-                                                                   read_InChI=True)
-                # Add new index to take account of SMILES:
-                df_smi = pd.Series(tauto_iso_smiles, 
-                                   index=df.index, 
-                                   name='SMILES')\
-                           .map(enumerate).map(list).explode()
-                df = pd.merge(left=df, 
-                              left_index=True, 
-                              right=pd.DataFrame(df_smi.to_list(), 
-                                                 columns=['SMILES_ID', 'SMILES'], 
-                                                 index=df_smi.index), 
-                              right_index=True)
-                df['SMILES_ID'] = 's' + df['SMILES_ID'].astype(str)
-                df['ID'] = df.index.astype(str) + '.' + df['SMILES_ID'].astype(str)
-                df.set_index('ID', verify_integrity=True, inplace=True)
-                df['Mol'] = [Chem.MolFromSmiles(smi) for smi in df['SMILES']]
-
-            else:
+        # Enumerate over tautomers or stereoisomers:
+        if enum_tauto or enum_iso:
+            if canonicalise_tauto:
                 # Ensure inchi is a string here to catch any missing inchis or nan 
                 # values, these will be picked up on next line:
-                df['Mol'] = [Chem.MolFromInchi(str(inchi)) for inchi in df['InChI']]
+                df['Mol'] = [Chem.MolFromInchi(str(inchi)) for inchi in df[structure_col]]
 
                 # Remove any InChIs which cannot be read into RDKit:
                 if invalid_inchi_file is not None:
-                    df.loc[df['Mol'].isna(), 'InChI']\
+                    df.loc[df['Mol'].isna(), structure_col]\
                       .to_csv(invalid_inchi_file, sep=sep, mode='a', header=False)
                 df = df.loc[df['Mol'].notna()]
 
-                if canonicalise_tauto:
-                    df['Mol'] = [canonicalise_tautomer(mol) for mol in df['Mol']]
-                df['SMILES'] = [Chem.MolToSmiles(smi) for smi in df['Mol']]
+                df['Mol'] = [canonicalise_tautomer(mol) for mol in df['Mol']]
+                df['canon_tauto_SMILES'] = [Chem.MolToSmiles(smi) for smi in df['Mol']]
+                tauto_iso_smiles = enumerate_tautomers_isomers(df['canon_tauto_SMILES'], 
+                                                               enum_tauto=enum_tauto, 
+                                                               enum_iso=enum_iso, 
+                                                               canonicalise_smi=False, 
+                                                               read_InChI=False)
+            else:
+                tauto_iso_smiles = enumerate_tautomers_isomers(df[structure_col], 
+                                                               enum_tauto=enum_tauto, 
+                                                               enum_iso=enum_iso, 
+                                                               canonicalise_smi=False, 
+                                                               read_InChI=True)
+            # Add new index to take account of SMILES:
+            df_smi = pd.Series(tauto_iso_smiles, 
+                               index=df.index, 
+                               name='SMILES')\
+                       .map(enumerate).map(list).explode()
+            df = pd.merge(left=df, 
+                          left_index=True, 
+                          right=pd.DataFrame(df_smi.to_list(), 
+                                             columns=['SMILES_ID', 'SMILES'], 
+                                             index=df_smi.index), 
+                          right_index=True)
+            df['SMILES_ID'] = 's' + df['SMILES_ID'].astype(str)
+            df['ID'] = df.index.astype(str) + '.' + df['SMILES_ID'].astype(str)
+            df.set_index('ID', verify_integrity=True, inplace=True)
+            df['Mol'] = [Chem.MolFromSmiles(smi) for smi in df['SMILES']]
 
-            # Apply Lilly rules here in case decide to drop compounds which don't pass:
-            if lilly_rules:
+        else:
+            # Ensure inchi is a string here to catch any missing inchis or nan 
+            # values, these will be picked up on next line:
+            df['Mol'] = [Chem.MolFromInchi(str(inchi)) for inchi in df[structure_col]]
+
+            # Remove any InChIs which cannot be read into RDKit:
+            if invalid_inchi_file is not None:
+                df.loc[df['Mol'].isna(), structure_col]\
+                  .to_csv(invalid_inchi_file, sep=sep, mode='a', header=False)
+            df = df.loc[df['Mol'].notna()]
+
+            if canonicalise_tauto:
+                df['Mol'] = [canonicalise_tautomer(mol) for mol in df['Mol']]
+            df['SMILES'] = [Chem.MolToSmiles(smi) for smi in df['Mol']]
+
+        # Apply Lilly rules here in case decide to drop compounds which don't pass:
+        if lilly_rules:
+            if not os.path.isfile(lilly_rules_script):
+                print("WARNING: Cannot find Lilly rules script "+\
+                      "(Lilly_Medchem_Rules.rb) at: "+lilly_rules_script+\
+                      ", will skip Lilly rules.")
+            else:
                 df = apply_lilly_rules(df=df,
                                        smiles_col='SMILES', 
-                                       run_in_temp_dir=True)
+                                       run_in_temp_dir=True, 
+                                       lilly_rules_script=lilly_rules_script)
                 if drop_lilly_failures:
                     df = df.drop(~df['Lilly_rules_pass'])
 
-            n_mols += len(df['SMILES'])
+        n_mols += len(df['SMILES'])
 
-            # If enumerated over tautomers or stereoisomers still 
-            # make predictions in chunks close to chunksize:
-            for enum_i, df in enumerate(np.array_split(df, max([int(round(len(df)/chunksize)), 1]))):
-                calc_predictions(df, 
-                                 #smiles=df['SMILES'], 
-                                 #mols=df['Mol'], 
-                                 save_hists=save_hists, 
-                                 models=models, 
-                                 descriptors=descriptors, 
-                                 substructs=substructs, 
-                                 hist_by_substruct=hist_by_substruct, 
-                                 calc_logp_oe=calc_logp_oe, 
-                                 calc_pfi=calc_pfi, 
-                                 calc_mpo=calc_mpo, 
-                                 write_header=not bool(df_i) and not bool(enum_i), 
-                                 outfile=outfile, 
-                                 all_hists=all_hists, 
-                                 substruct_hists=substruct_hists)
+        # If enumerated over tautomers or stereoisomers still 
+        # make predictions in chunks close to chunksize:
+        for enum_i, df in enumerate(np.array_split(df, max([int(round(len(df)/chunksize)), 1]))):
+            calc_predictions(df, 
+                             #smiles=df['SMILES'], 
+                             #mols=df['Mol'], 
+                             save_hists=save_hists, 
+                             models=models, 
+                             descriptors=descriptors, 
+                             substructs=substructs, 
+                             hist_by_substruct=hist_by_substruct, 
+                             calc_logp_oe=calc_logp_oe, 
+                             calc_pfi=calc_pfi, 
+                             calc_mpo=calc_mpo, 
+                             write_header=not bool(df_i) and not bool(enum_i), 
+                             outfile=outfile, 
+                             all_hists=all_hists, 
+                             substruct_hists=substruct_hists)
 
 
     # Save histograms:

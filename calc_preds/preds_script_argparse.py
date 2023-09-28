@@ -29,8 +29,9 @@ from cheminfo_utils.rdkit_extra_desc import GetFusedRings
 sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/calc_predictions_on_dataset')
 from calc_preds_descs import process_df, class_sol, error_wrapper, substruct_match
 
-sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2023.7.3')
-from predictive_models.ml_model_gcnn import Ensemble_Model_DC
+#sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2023.7.3')
+sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV/deepchem_models/final_models/')
+from ml_model_gcnn import Ensemble_Model_DC
 
 
 
@@ -48,6 +49,8 @@ parser.add_argument('-m', '--models', nargs='+', help="ML models to calculate pr
 parser.add_argument('-i', '--inchis', dest='infile', help="Input file containing list of InChIs.")
 index_col=False
 index_prefix='a' # Label each dataset from Bruno with a letter
+parser.add_argument('-d', '--delim', dest='sep', default=';', help="Delimiter for input file.")
+parser.add_argument('-s', '--struct_col', dest='structure_col', default='InChI', help="")
 
 # Read options:
 #start_line=int(sys.argv[1])
@@ -71,6 +74,7 @@ parser.add_argument('--enum_stereo', dest='enum_iso', action='store_true', help=
 parser.add_argument('--lilly_rules', action='store_true', help="Run Lilly rules.")
 #drop_lilly_failures=False
 parser.add_argument('--drop_lilly_failures', action='store_true', help="Drop compounds which fail Lilly rules (saves prediction time).")
+parser.add_argument('--lilly_rules_script', default='Lilly_Medchem_Rules.rb', help="Location of Lilly_Medchem_Rules.rb script.")
 
 # Data to save:
 #outfile=f'all_preds_{start_line}-{end_line}.csv.gz'
@@ -189,7 +193,7 @@ models = {'pIC50_pred' : lambda smis: pIC50_pred_model.predict(smis)[0],
 if __name__ == '__main__':
 
     args = parser.parse_args()
-    if args.lines == (0, -1):
+    if tuple(args.lines) == (0, -1):
         outfile = f'{args.outfile_prefix}.csv.gz'
     else:
         outfile = f'{args.outfile_prefix}_{args.lines[0]}-{args.lines[1]}.csv.gz'
@@ -206,6 +210,8 @@ if __name__ == '__main__':
              }
 
     process_df(args.infile, 
+               sep=args.sep, 
+               structure_col=args.structure_col, 
                start_line=args.lines[0], 
                end_line=args.lines[1], 
                index_col=index_col, 
@@ -216,6 +222,7 @@ if __name__ == '__main__':
                enum_tauto=args.enum_tauto, 
                enum_iso=args.enum_iso, 
                lilly_rules=args.lilly_rules,
+               lilly_rules_script=args.lilly_rules_script,
                drop_lilly_failures=args.drop_lilly_failures,
                models=models, 
                descriptors=descriptors, 
