@@ -16,6 +16,8 @@
 #    done
 #done
 
+export lilly_rules_script=/users/xpb20111/repos/PP/src/Lilly-Medchem-Rules/Lilly_Medchem_Rules.rb
+
 # Run test:
 
 echo "Running preds_script.py..."

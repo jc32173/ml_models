@@ -9,7 +9,7 @@ python ../preds_script_argparse.py \
     -o all_preds \
     -e invalid_inchis.inchi.gz \
     --lilly_rules \
-    --lilly_rules_script /users/xpb20111/repos/PP/src/Lilly-Medchem-Rules/Lilly_Medchem_Rules.rb \
+    --lilly_rules_script ${lilly_rules_script} \
     --desc "molwt" \
            "n_aromatic_rings" \
            "n_heavy_atoms" \
