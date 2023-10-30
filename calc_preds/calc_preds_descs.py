@@ -451,8 +451,8 @@ def process_df(infile,
             df = df.loc[df['Mol'].notna()]
 
             if canonicalise_tauto:
-                df['Mol'] = [canonicalise_tautomer(mol) for mol in df['Mol']]
-            df['SMILES'] = [Chem.MolToSmiles(smi) for smi in df['Mol']]
+                df.loc[:,'Mol'] = [canonicalise_tautomer(mol) for mol in df['Mol']]
+            df.loc[:,'SMILES'] = [Chem.MolToSmiles(mol) for mol in df['Mol']]
 
         # Apply Lilly rules here in case decide to drop compounds which don't pass:
         if lilly_rules:
@@ -460,6 +460,7 @@ def process_df(infile,
                 print("WARNING: Cannot find Lilly rules script "+\
                       "(Lilly_Medchem_Rules.rb) at: "+lilly_rules_script+\
                       ", will skip Lilly rules.")
+                lilly_rules = False
             else:
                 df = apply_lilly_rules(df=df,
                                        smiles_col='SMILES', 
