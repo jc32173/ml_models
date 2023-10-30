@@ -1,6 +1,6 @@
 #! /bin/bash
 
-# Calculate 
+# Calculate model predictions and descriptors to check that results have not changed.
 
 python ../preds_script_argparse.py \
     -i test_inchis.inchi.gz \
@@ -20,6 +20,7 @@ python ../preds_script_argparse.py \
            "MPO" 0.1 \
            "molwt" 5 \
            "n_heavy_atoms" 1 \
+    --hist_by_substruct hydantoin_substructs.csv \
     --calc_oe_logp \
     --calc_pfi \
     --calc_mpo \

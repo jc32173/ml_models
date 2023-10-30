@@ -12,17 +12,26 @@ PP_ML_models_path = '/users/xpb20111/programs/ml_model_code/'
 import sys, os
 import numpy as np
 import pandas as pd
+# Silence SettingWithCopyWarning from pandas (see: https://stackoverflow.com/questions/20625582/how-to-deal-with-settingwithcopywarning-in-pandas):
+pd.options.mode.chained_assignment = None
 import argparse
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
-# Should be able to get RDContribDir from: 
-# from rdkit.Chem import RDConfig
-# RDContribDir = RDConfig.RDContribDir
-# but isn't pointing to the right directory in deepchem environment so hard-code instead:
-RDContribDir = '/users/xpb20111/.conda/envs/deepchem/share/RDKit/Contrib/'
-sys.path.append(os.path.join(RDContribDir, 'SA_Score'))
-import sascorer
 from rdkit.Chem.Scaffolds.MurckoScaffold import MurckoScaffoldSmiles
+
+# Should be able to get RDContribDir from: 
+try:
+    from rdkit.Chem import RDConfig
+    RDContribDir = RDConfig.RDContribDir
+    import sascorer
+except ModuleNotFoundError:
+    # but isn't pointing to the right directory in deepchem environment so hard-code instead:
+    try:
+        RDContribDir = '/users/xpb20111/.conda/envs/deepchem/share/RDKit/Contrib/'
+        sys.path.append(os.path.join(RDContribDir, 'SA_Score'))
+        import sascorer
+    except ModuleNotFoundError:
+        sascorer = False
 
 sys.path.insert(0, '/users/xpb20111/programs/')
 from cheminfo_utils.rdkit_extra_desc import GetFusedRings
@@ -35,9 +44,27 @@ from ml_model_gcnn import Ensemble_Model_DC
 
 
 
+# Possible descriptors to calculate (all take RDKit mol object as input):
+descriptors={'molwt' : rdMolDescriptors.CalcExactMolWt, 
+             'n_aromatic_rings' : rdMolDescriptors.CalcNumAromaticRings, 
+             'n_heavy_atoms' : rdMolDescriptors.CalcNumHeavyAtoms, 
+             'murcko_scaffold' : lambda mol: MurckoScaffoldSmiles(mol=mol, 
+                                                                  includeChirality=False), 
+             'max_fused_rings' : lambda mol: len(GetFusedRings(mol)[0]),
+             '_order' : ['molwt', 
+                         'n_aromatic_rings', 
+                         'n_heavy_atoms', 
+                         'murcko_scaffold',
+                         'max_fused_rings'
+                        ]
+            }
+if sascorer:
+    descriptors['SAscore'] = sascorer.calculateScore
+    descriptors['_order'].append('SAscore')
+
+# Command line arguments:
 parser = argparse.ArgumentParser(allow_abbrev=False)
 parser.add_argument('-m', '--models', nargs='+', help="ML models to calculate predictions.")
-
 
 
 #--------------#
@@ -90,33 +117,25 @@ parser.add_argument('-e', '--errors', dest='invalid_inchi_file', help="File to s
 #            'molwt' : 5, 
 #            'n_heavy_atoms' : 1
 #           }
-save_hists={}
+#save_hists={}
 hist_file_prefix='hist'
 append_to_hist=True
-parser.add_argument('--hist', help="Histogram predictions.")
+#parser.add_argument('--hist', help="Histogram predictions.")
+parser.add_argument('--hist', default=False, nargs='*', help="Pairs of values for property and bin width for histogramming, if none given default values are used.")
 
-# Descriptors to calculate (take RDKit mol object as input):
-descriptors={'molwt' : rdMolDescriptors.CalcExactMolWt, 
-             'n_aromatic_rings' : rdMolDescriptors.CalcNumAromaticRings, 
-             'n_heavy_atoms' : rdMolDescriptors.CalcNumHeavyAtoms, 
-             'murcko_scaffold' : lambda mol: MurckoScaffoldSmiles(mol=mol, 
-                                                                  includeChirality=False), 
-             'SAscore' : sascorer.calculateScore,
-             'max_fused_rings' : lambda mol: len(GetFusedRings(mol)[0]),
-             '_order' : ['molwt', 
-                         'n_aromatic_rings', 
-                         'n_heavy_atoms', 
-                         'murcko_scaffold',
-                         'SAscore',
-                         'max_fused_rings'
-                        ]
-            }
+
+parser.add_argument('--desc', nargs='*', help='')
+
+
 
 # Substructures to search for:
 #df_substructs=None
-df_substructs=pd.read_csv('/users/xpb20111/Prosperity_partnership/pymolgen_output/fragments/hydantoin_substructs.csv')
-df_substructs['substruct_mol']=[Chem.MolFromSmarts(smi) for smi in df_substructs['substruct_SMARTS']]
-hist_by_substruct=True
+#df_substructs=pd.read_csv('/users/xpb20111/Prosperity_partnership/pymolgen_output/fragments/hydantoin_substructs.csv')
+#df_substructs['substruct_mol']=[Chem.MolFromSmarts(smi) for smi in df_substructs['substruct_SMARTS']]
+#hist_by_substruct=True
+
+parser.add_argument('--hist_by_substruct', default=False, help="")
+
 
 # Other values to calculate:
 #calc_logp_oe=True
@@ -193,21 +212,81 @@ models = {'pIC50_pred' : lambda smis: pIC50_pred_model.predict(smis)[0],
 if __name__ == '__main__':
 
     args = parser.parse_args()
+    args.outfile_prefix = args.outfile_prefix.replace('.gz', '')
+    args.outfile_prefix = args.outfile_prefix.replace('.csv', '')
     if tuple(args.lines) == (0, -1):
         outfile = f'{args.outfile_prefix}.csv.gz'
     else:
         outfile = f'{args.outfile_prefix}_{args.lines[0]}-{args.lines[1]}.csv.gz'
 
-    # pIC50:
-    pIC50_pred_model = Ensemble_Model_DC(args.models[0])
-    print('Using pIC50 model: {}'.format(pIC50_pred_model.version))
-    print(pIC50_pred_model.info)
-    _ = pIC50_pred_model.predict('C')[0]
+    def to_numeric(s):
+        if '.' in s:
+            return float(s)
+        else:
+            return int(s)
 
-    models = {'pIC50_pred' : lambda smis: pIC50_pred_model.predict(smis)[0],
-              '_order' : ['pIC50_pred', 
-                         ]
-             }
+    # Process command line arguments for histograms:
+    if isinstance(args.hist, list):
+        if len(args.hist) % 2 != 0:
+            raise ValueError('Number of values given to --hist must be even (or zero)')
+        # Default values:
+        elif len(args.hist) == 0:
+            hist=('pIC50_pred', 0.1, 
+                  'MPO', 0.1, 
+                  'molwt', 5, 
+                  'n_heavy_atoms', 1)
+        save_hists={}
+        for prpty, bin_width in zip(args.hist[::2], args.hist[1::2]):
+            save_hists[prpty] = to_numeric(bin_width)
+
+        if args.hist_by_substruct:
+            df_substructs=pd.read_csv(args.hist_by_substruct)
+            df_substructs['substruct_mol']=[Chem.MolFromSmarts(smi) for smi in df_substructs['substruct_SMARTS']]
+            hist_by_substruct=True
+
+    # Process command line arguments for descriptors:
+    selected_desc = {name : fn for name, fn in descriptors.items() 
+                     if name in args.desc}
+    selected_desc['_order'] = [name for name in args.desc 
+                               if name in descriptors.keys()]
+
+    # Process command line arguments for ML models:
+    sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2022.4.1')
+    from predictive_models.ml_model_gcnn_ens import Ensemble_Model_DC
+    sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2020.1.1')
+    from perm import Perm_Model
+    from sol import Sol_Model
+    def load_model(model_name, pk_filename):
+        if model_name in ['pIC50_pred', 'logD_pred']:
+            pred_model = Ensemble_Model_DC(pk_filename)
+            print('Using {} model version: {} ({})'.format(model_name, pred_model.version, pred_model.info))
+            _ = pred_model.predict('C')[0]
+            return lambda smis: pred_model.predict(smis)[0]
+        elif model_name == 'sol_pred':
+            sol_pred_model = \
+            Sol_Model('/users/xpb20111/programs/ml_model_code/2021.2.1/sol.pk', 'WDkw212Wab30m32l3i0qJAwYgD8qYnqV5pq7oCLd4e0=')
+            return lambda smis: [error_wrapper(smi, lambda smi: class_sol(sol_pred_model.predict(smi)[0])) for smi in smis]
+        elif model_name == 'perm_pred':
+            perm_pred_model = \
+            Perm_Model('/users/xpb20111/programs/ml_model_code/2021.2.1/perm.pk', 'AttUnNZ0RdeQujfzaaHVocRKzowe8Camg2mvlbxt2Zk=')
+            return lambda smis: [error_wrapper(smi, lambda smi: perm_pred_model.predict(smi)[0]) for smi in smis]
+
+    if len(args.models) % 2 != 0:
+        raise ValueError('--models expects pairs of values: model_name pk_filename, so must be even (or zero)')
+    models = {model_name : load_model(model_name, pk_filename) for 
+              model_name, pk_filename in zip(args.models[::2], args.models[1::2])}
+    models['_order'] = args.models[::2]
+
+#    # pIC50:
+#    pIC50_pred_model = Ensemble_Model_DC(args.models[0])
+#    print('Using pIC50 model: {}'.format(pIC50_pred_model.version))
+#    print(pIC50_pred_model.info)
+#    _ = pIC50_pred_model.predict('C')[0]
+#
+#    models = {'pIC50_pred' : lambda smis: pIC50_pred_model.predict(smis)[0],
+#              '_order' : ['pIC50_pred', 
+#                         ]
+#             }
 
     process_df(args.infile, 
                sep=args.sep, 
