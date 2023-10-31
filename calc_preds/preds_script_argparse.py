@@ -124,7 +124,7 @@ append_to_hist=True
 parser.add_argument('--hist', default=False, nargs='*', help="Pairs of values for property and bin width for histogramming, if none given default values are used.")
 
 
-parser.add_argument('--desc', nargs='*', help='')
+parser.add_argument('--desc', default=False, nargs='*', help="")
 
 
 
@@ -226,6 +226,9 @@ if __name__ == '__main__':
             return int(s)
 
     # Process command line arguments for histograms:
+    df_substructs = None
+    hist_by_substruct=False
+    save_hists={}
     if isinstance(args.hist, list):
         if len(args.hist) % 2 != 0:
             raise ValueError('Number of values given to --hist must be even (or zero)')
@@ -235,27 +238,37 @@ if __name__ == '__main__':
                   'MPO', 0.1, 
                   'molwt', 5, 
                   'n_heavy_atoms', 1)
-        save_hists={}
         for prpty, bin_width in zip(args.hist[::2], args.hist[1::2]):
             save_hists[prpty] = to_numeric(bin_width)
 
         if args.hist_by_substruct:
-            df_substructs=pd.read_csv(args.hist_by_substruct)
-            df_substructs['substruct_mol']=[Chem.MolFromSmarts(smi) for smi in df_substructs['substruct_SMARTS']]
+            df_substructs = pd.read_csv(args.hist_by_substruct)
+            df_substructs['substruct_mol'] = [Chem.MolFromSmarts(smi) for smi in df_substructs['substruct_SMARTS']]
             hist_by_substruct=True
 
     # Process command line arguments for descriptors:
-    selected_desc = {name : fn for name, fn in descriptors.items() 
-                     if name in args.desc}
-    selected_desc['_order'] = [name for name in args.desc 
-                               if name in descriptors.keys()]
+    if isinstance(args.desc, list):
+        if len(args.desc) > 0:
+            selected_desc = {name : fn for name, fn in descriptors.items() 
+                             if name in args.desc}
+            selected_desc['_order'] = [name for name in args.desc 
+                                       if name in descriptors.keys()]
+        else:
+            selected_desc = descriptors
+    else:
+        selected_desc = {'_order' : []}
+    if args.calc_pfi and ('n_aromatic_rings' not in selected_desc.keys()):
+        selected_desc['n_aromatic_rings'] = descriptors['n_aromatic_rings']
+        selected_desc['_order'].append('n_aromatic_rings')
 
     # Process command line arguments for ML models:
     sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2022.4.1')
     from predictive_models.ml_model_gcnn_ens import Ensemble_Model_DC
+    del sys.path[0]
     sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2020.1.1')
     from perm import Perm_Model
     from sol import Sol_Model
+    del sys.path[0]
     def load_model(model_name, pk_filename):
         if model_name in ['pIC50_pred', 'logD_pred']:
             pred_model = Ensemble_Model_DC(pk_filename)
@@ -304,7 +317,7 @@ if __name__ == '__main__':
                lilly_rules_script=args.lilly_rules_script,
                drop_lilly_failures=args.drop_lilly_failures,
                models=models, 
-               descriptors=descriptors, 
+               descriptors=selected_desc, 
                substructs=df_substructs, 
                hist_by_substruct=hist_by_substruct, 
                calc_logp_oe=args.calc_oe_logp, 
