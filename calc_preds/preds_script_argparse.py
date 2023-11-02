@@ -1,22 +1,18 @@
 #! /bin/env python
 
-# November 2022
 # Script to run calc_preds_desc.py and get predictions, descriptors and
-# substructure matches for large dataset of InChIs.
-
-
-# Path to PP_ML_models directory, must end in "/":
-#PP_ML_models_path = "/users/xpb20111/programs/ml_model_code/PP_ML_models/"
-PP_ML_models_path = '/users/xpb20111/programs/ml_model_code/'
+# substructure matches for large dataset of molecules as InChIs or SMILES.
 
 import sys, os
 import numpy as np
 import pandas as pd
-# Silence SettingWithCopyWarning from pandas (see: https://stackoverflow.com/questions/20625582/how-to-deal-with-settingwithcopywarning-in-pandas):
+# Silence SettingWithCopyWarning from pandas 
+# (see: https://stackoverflow.com/questions/20625582/how-to-deal-with-settingwithcopywarning-in-pandas):
 pd.options.mode.chained_assignment = None
 import argparse
 from rdkit import Chem
-from rdkit.Chem import rdMolDescriptors
+#from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import Descriptors
 from rdkit.Chem.Scaffolds.MurckoScaffold import MurckoScaffoldSmiles
 
 # Should be able to get RDContribDir from: 
@@ -33,21 +29,19 @@ except ModuleNotFoundError:
     except ModuleNotFoundError:
         sascorer = False
 
-sys.path.insert(0, '/users/xpb20111/programs/')
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 
+                                                '..')))
+
 from cheminfo_utils.rdkit_extra_desc import GetFusedRings
-sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/calc_predictions_on_dataset')
-from calc_preds_descs import process_df, class_sol, error_wrapper, substruct_match
+from calc_preds.calc_preds_descs import process_df, class_sol, error_wrapper, substruct_match
 
-#sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2023.7.3')
-sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV/deepchem_models/final_models/')
-from ml_model_gcnn import Ensemble_Model_DC
-
+from deepchem_models.final_models.ml_model_gcnn import Ensemble_Model_DC
 
 
 # Possible descriptors to calculate (all take RDKit mol object as input):
-descriptors={'molwt' : rdMolDescriptors.CalcExactMolWt, 
-             'n_aromatic_rings' : rdMolDescriptors.CalcNumAromaticRings, 
-             'n_heavy_atoms' : rdMolDescriptors.CalcNumHeavyAtoms, 
+descriptors={'molwt' : Descriptors.ExactMolWt, 
+             'n_aromatic_rings' : Descriptors.NumAromaticRings, 
+             'n_heavy_atoms' : Descriptors.HeavyAtomCount, 
              'murcko_scaffold' : lambda mol: MurckoScaffoldSmiles(mol=mol, 
                                                                   includeChirality=False), 
              'max_fused_rings' : lambda mol: len(GetFusedRings(mol)[0]),
@@ -64,7 +58,7 @@ if sascorer:
 
 # Command line arguments:
 parser = argparse.ArgumentParser(allow_abbrev=False)
-parser.add_argument('-m', '--models', nargs='+', help="ML models to calculate predictions.")
+parser.add_argument('-m', '--models', default=[], nargs='+', help="ML models to calculate predictions.")
 
 
 #--------------#
@@ -234,10 +228,10 @@ if __name__ == '__main__':
             raise ValueError('Number of values given to --hist must be even (or zero)')
         # Default values:
         elif len(args.hist) == 0:
-            hist=('pIC50_pred', 0.1, 
-                  'MPO', 0.1, 
-                  'molwt', 5, 
-                  'n_heavy_atoms', 1)
+            args.hist=('pIC50_pred', '0.1', 
+                       'MPO', '0.1', 
+                       'molwt', '5', 
+                       'n_heavy_atoms', '1')
         for prpty, bin_width in zip(args.hist[::2], args.hist[1::2]):
             save_hists[prpty] = to_numeric(bin_width)
 
@@ -262,13 +256,13 @@ if __name__ == '__main__':
         selected_desc['_order'].append('n_aromatic_rings')
 
     # Process command line arguments for ML models:
-    sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2022.4.1')
-    from predictive_models.ml_model_gcnn_ens import Ensemble_Model_DC
-    del sys.path[0]
-    sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2020.1.1')
-    from perm import Perm_Model
-    from sol import Sol_Model
-    del sys.path[0]
+    #sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2022.4.1')
+    #from predictive_models.ml_model_gcnn_ens import Ensemble_Model_DC
+    #del sys.path[0]
+    #sys.path.insert(0, '/users/xpb20111/programs/ml_model_code/2020.1.1')
+    #from perm import Perm_Model
+    #from sol import Sol_Model
+    #del sys.path[0]
     def load_model(model_name, pk_filename):
         if model_name in ['pIC50_pred', 'logD_pred']:
             pred_model = Ensemble_Model_DC(pk_filename)
@@ -285,10 +279,17 @@ if __name__ == '__main__':
             return lambda smis: [error_wrapper(smi, lambda smi: perm_pred_model.predict(smi)[0]) for smi in smis]
 
     if len(args.models) % 2 != 0:
-        raise ValueError('--models expects pairs of values: model_name pk_filename, so must be even (or zero)')
+        raise ValueError('--models expects pairs of values: model_name pk_filename, so must be even number')
     models = {model_name : load_model(model_name, pk_filename) for 
               model_name, pk_filename in zip(args.models[::2], args.models[1::2])}
     models['_order'] = args.models[::2]
+
+    if args.calc_mpo:
+        if not args.calc_pfi:
+            args.calc_pfi = True
+        if 'pIC50_pred' not in models.keys():
+            print('WARNING: Cannot calculate MPO without a model for "pIC50_pred"')
+            args.calc_mpo = False
 
 #    # pIC50:
 #    pIC50_pred_model = Ensemble_Model_DC(args.models[0])
