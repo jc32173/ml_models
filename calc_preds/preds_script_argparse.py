@@ -117,8 +117,10 @@ append_to_hist=True
 #parser.add_argument('--hist', help="Histogram predictions.")
 parser.add_argument('--hist', default=False, nargs='*', help="Pairs of values for property and bin width for histogramming, if none given default values are used.")
 
+parser.add_argument('--counts', action='store_true', help="Count number of compounds which pass filters (e.g. Lilly rules).")
 
 parser.add_argument('--desc', default=False, nargs='*', help="")
+
 
 
 
@@ -319,6 +321,7 @@ if __name__ == '__main__':
                drop_lilly_failures=args.drop_lilly_failures,
                models=models, 
                descriptors=selected_desc, 
+               save_mol_counts=args.counts, 
                substructs=df_substructs, 
                hist_by_substruct=hist_by_substruct, 
                calc_logp_oe=args.calc_oe_logp, 

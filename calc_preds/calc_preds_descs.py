@@ -214,6 +214,7 @@ def calc_predictions(df_all_vals,
                      write_header=True, 
                      outfile='', 
                      all_hists={}, 
+                     #mol_counts={},
                      substruct_hists={}):
     """
     Calculate predictions and descriptors for a list of SMILES.
@@ -323,6 +324,8 @@ def process_df(infile,
                                 rdMolDescriptors.CalcExactMolWt, 
                             'n_aromatic_rings' : \
                                 rdMolDescriptors.CalcNumAromaticRings}, 
+               save_mol_counts=False, 
+               mol_counts_outfile='mol_counts.csv', 
                substructs=None, 
                hist_by_substruct=False, 
                calc_logp_oe=True, 
@@ -336,6 +339,14 @@ def process_df(infile,
     """
 
     start_time = datetime.now()
+
+    if save_mol_counts:
+        mol_counts = pd.Series(index=['Valid InChIs',
+                                      'Invalid InChIs',
+                                      'Pass Lilly substructure filters',
+                                      'Pass all Lilly rules'],
+                               data=[0, 0, 0, 0], 
+                               name='Count')
 
     # Set up empty histograms:
     all_hists = {}
@@ -449,6 +460,9 @@ def process_df(infile,
             if invalid_inchi_file is not None:
                 df.loc[df['Mol'].isna(), structure_col]\
                   .to_csv(invalid_inchi_file, sep=sep, mode='a', header=False)
+            if save_mol_counts:
+                mol_counts['Invalid InChIs'] += sum(df['Mol'].isna())
+                mol_counts['Valid InChIs'] += sum(df['Mol'].notna())
             df = df.loc[df['Mol'].notna()]
 
             if canonicalise_tauto:
@@ -467,6 +481,14 @@ def process_df(infile,
                                        smiles_col='SMILES', 
                                        run_in_temp_dir=True, 
                                        lilly_rules_script=lilly_rules_script)
+
+                # Count number of passes/substructure failures:
+                if save_mol_counts:
+                    mol_counts['Pass Lilly substructure filters'] += \
+                      len(df.loc[df['Lilly_rules_warning'].astype(str).str.startswith('D') | \
+                                 df['Lilly_rules_pass']])
+                    mol_counts['Pass all Lilly rules'] += sum(df['Lilly_rules_pass'])
+
                 if drop_lilly_failures:
                     df = df.drop(~df['Lilly_rules_pass'])
 
@@ -496,6 +518,12 @@ def process_df(infile,
                              all_hists=all_hists, 
                              substruct_hists=substruct_hists)
 
+    # Save counts:
+    if save_mol_counts:
+        if os.path.isfile(mol_counts_outfile):
+            prev_mol_counts = pd.read_csv(mol_counts_outfile, index_col=0).squeeze().T
+            mol_counts = mol_counts.add(prev_mol_counts, fill_value=0).astype(int)
+        mol_counts.to_csv(mol_counts_outfile)
 
     # Save histograms:
     for val_name, bin_width in save_hists.items():
