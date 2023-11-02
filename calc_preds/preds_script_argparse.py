@@ -215,6 +215,9 @@ if __name__ == '__main__':
     else:
         outfile = f'{args.outfile_prefix}_{args.lines[0]}-{args.lines[1]}.csv.gz'
 
+    if os.path.isfile(outfile):
+        raise FileExistsError('File: {} already exists, this will not be overwritten'.format(outfile))
+
     def to_numeric(s):
         if '.' in s:
             return float(s)
