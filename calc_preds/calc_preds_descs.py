@@ -363,8 +363,9 @@ def process_df(infile,
         df_iter = pd.read_csv(infile, 
                               #compression=compression, 
                               chunksize=chunksize, 
-                              sep=';', 
-                              header=None, 
+                              sep=' ',
+                              header=None,
+                              usecols=[0],
                               names=[structure_col], 
                               skiprows=start_line, 
                               nrows=nrows)
@@ -468,6 +469,11 @@ def process_df(infile,
                                        lilly_rules_script=lilly_rules_script)
                 if drop_lilly_failures:
                     df = df.drop(~df['Lilly_rules_pass'])
+
+        if len(df['SMILES']) == 0:
+            print('WARNING: No molecules in chunk {} for predictions'.format(df_i)+\
+                  ' (molecules may be invalid or fail Lilly rules (if --drop_lilly_failures)')
+            continue
 
         n_mols += len(df['SMILES'])
 
