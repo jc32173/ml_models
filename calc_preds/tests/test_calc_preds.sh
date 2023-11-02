@@ -2,6 +2,11 @@
 
 # Calculate model predictions and descriptors to check that results have not changed.
 
+if [ "${lilly_rules_script}" == "" ]
+then
+    export lilly_rules_script=/users/xpb20111/repos/PP/src/Lilly-Medchem-Rules/Lilly_Medchem_Rules.rb
+fi
+
 python ../preds_script_argparse.py \
     -i test_inchis.inchi.gz \
     -l 0 100 \
@@ -20,6 +25,7 @@ python ../preds_script_argparse.py \
            "MPO" 0.1 \
            "molwt" 5 \
            "n_heavy_atoms" 1 \
+    --counts \
     --hist_by_substruct hydantoin_substructs.csv \
     --calc_oe_logp \
     --calc_pfi \

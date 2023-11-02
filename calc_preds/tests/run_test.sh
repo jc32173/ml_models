@@ -3,11 +3,12 @@
 # Run preds_script.py on test data and compare the resulting files to a 
 # previous run:
 
-# Update reference files:
+## Update reference files:
 #echo "Running preds_script.py..."
-#python preds_script.py 0 100 &> /dev/null
+#bash test_calc_preds.sh
 #mv all_preds_0-100.csv.gz all_preds_0-100_ref.csv.gz
 #mv invalid_inchis.inchi.gz invalid_inchis_ref.inchi.gz
+#mv mol_counts.csv mol_counts_ref.csv
 #for prpty in "pIC50_pred" "MPO" "molwt" "n_heavy_atoms"
 #do
 #    for suffix in "" "_by_substructure"
@@ -16,12 +17,10 @@
 #    done
 #done
 
-export lilly_rules_script=/users/xpb20111/repos/PP/src/Lilly-Medchem-Rules/Lilly_Medchem_Rules.rb
-
 # Run test:
 
 echo "Running preds_script.py..."
-bash test_calc_preds.sh &> /dev/null
+bash test_calc_preds.sh #&> /dev/null
 
 # Check output files using diff:
 
@@ -116,6 +115,7 @@ let tot_return_val=${tot_return_val}+$?
 # Delete output files:
 rm all_preds_0-100.csv.gz
 rm invalid_inchis.inchi.gz
+rm mol_counts.csv
 for prpty in "pIC50_pred" "MPO" "molwt" "n_heavy_atoms"
 do
     for suffix in "" "_by_substructure"
