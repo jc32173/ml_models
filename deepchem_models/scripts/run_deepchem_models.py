@@ -44,9 +44,6 @@ if len(sys.argv) >= 3:
 else:
     rand_seed = None
 
-# Update this when code is moved to programs folder:
-sys.path.insert(0, '/users/xpb20111/programs/deepchem_dev_nested_CV')
-
 # Import code:
 from training_utils.record_results import setup_results_series, preds_file_index_cols
 from training_utils.splitting import nested_CV_splits, train_test_split, check_dataset_split

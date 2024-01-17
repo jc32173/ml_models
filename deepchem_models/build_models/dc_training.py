@@ -25,8 +25,8 @@ from deepchem_models.build_models.dc_preprocess import transform
 from deepchem_models.modified_deepchem.\
     wrap_KerasModel_for_uncertainty import wrap_KerasModel_for_uncertainty
 #from modified_deepchem.GraphConvClassifier import GraphConvClassifier
-from deepchem_models.modified_deepchem.GraphConvModel_OptPooling import \
-    GraphConvModel_OptPooling
+#from deepchem_models.modified_deepchem.GraphConvModel_OptPooling import \
+#    GraphConvModel_OptPooling
 
 
 def get_hyperparams_grid(hyperparams):
