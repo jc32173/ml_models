@@ -4,7 +4,7 @@
 
 if [ "${lilly_rules_script}" == "" ]
 then
-    export lilly_rules_script=/users/xpb20111/repos/PP/src/Lilly-Medchem-Rules/Lilly_Medchem_Rules.rb
+    export lilly_rules_script=NULL
 fi
 
 python ../preds_script_argparse.py \

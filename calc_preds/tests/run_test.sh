@@ -46,9 +46,16 @@ python <<EOF
 import sys
 import pandas as pd
 
-df1 = pd.read_csv('all_preds_0-100_ref.csv.gz', 
-                  sep=';')
 df2 = pd.read_csv('all_preds_0-100.csv.gz', 
+                  sep=';')
+
+# Open correct reference results depending on whether test was run with Lilly 
+# rules or not:
+if 'Lilly_rules_pass' in df2.columns:
+    all_preds_ref_file = 'all_preds_0-100_ref.csv.gz'
+else:
+    all_preds_ref_file = 'all_preds_0-100_ref_nolilly.csv.gz'
+df1 = pd.read_csv(all_preds_ref_file, 
                   sep=';')
 
 # Separate DataFrame into numeric and non-numeric types:
@@ -79,14 +86,16 @@ test_pass = True
 
 if len(pd.concat([df1_str, df2_str]).drop_duplicates()) > \
     max([len(df1_str), len(df2_str)]):
-    print('Non-numeric columns of files all_preds_0-100_ref.csv and all_preds_0-100.csv differ')
+    print('Non-numeric columns of files {} and all_preds_0-100.csv.gz differ'\
+          .format(all_preds_ref_file))
     print(df1_str.compare(df2_str, 
                           align_axis=0, 
 			  #result_names=("ref", "new")
                          ))
     test_pass = False
 else:
-    print('Non-numeric columns of files all_preds_0-100_ref.csv and all_preds_0-100.csv are identical')
+    print('Non-numeric columns of files {} and all_preds_0-100.csv.gz are '\
+          'identical'.format(all_preds_ref_file))
 
 # Compare numeric columns:
 
@@ -97,13 +106,15 @@ tolerance = 0.001
 diff_below_tol = bool((df1_numeric - df2_numeric).max().max() < tolerance)
 
 if not diff_below_tol:
-    print('Numeric columns of files all_preds_0-100_ref.csv and all_preds_0-100.csv differ by more than tolerance (> {})'.format(tolerance))
+    print('Numeric columns of files {} and all_preds_0-100.csv.gz differ by '\
+          'more than tolerance (> {})'.format(all_preds_ref_file, tolerance))
     print('Difference in numeric columns:')
     print(df1_numeric - df2_numeric)
 
     test_pass = False
 else:
-    print('Numeric columns of files all_preds_0-100_ref.csv and all_preds_0-100.csv are within tolerance (< {})'.format(tolerance))
+    print('Numeric columns of files {} and all_preds_0-100.csv.gz are within '\
+          'tolerance (< {})'.format(all_preds_ref_file, tolerance))
 
 # Set return value:
 if not test_pass:
